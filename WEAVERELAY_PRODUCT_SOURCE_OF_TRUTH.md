@@ -137,9 +137,13 @@ The active protected branch is `cross-system-diagnosis-v1`.
 
 Stage 1 now includes read-only provider health, cross-system mapping, deployment/environment truth, Railway runtime configuration evidence, Railway → Supabase correlation, and Stripe webhook-boundary evidence.
 
-A first **Stage 2 guided-repair pilot** now exists on the protected branch for a narrowly proven Railway → Supabase mismatch. It may change only Railway `SUPABASE_URL`, and only when independent live evidence proves exactly one deployed Railway service and exactly one intended Supabase project. The customer must explicitly approve immediately before the write. The mutation is read back and configuration-level verification is required. This repair must fail closed when the relationship is ambiguous. Live runtime/deployment verification remains a separate postcondition and must not be overstated.
+A first **Stage 2 guided-repair pilot** exists for a narrowly proven Railway → Supabase mismatch. It may change only Railway `SUPABASE_URL`, and only when independent live evidence proves exactly one deployed Railway service and exactly one intended Supabase project. The customer must explicitly approve immediately before the configuration write. The mutation is read back and configuration-level verification is required. This repair fails closed when the relationship is ambiguous.
 
-This repair is not yet a broad production promise and must not be marketed as generally available until production provider permissions and stranger end-to-end acceptance testing pass.
+If that configuration value actually changes, WeaveRelay now treats production refresh as a separate action rather than silently redeploying. Diagnosis offers **REDEPLOY & VERIFY** only for the already-proven Railway service/environment, with a second explicit approval gate. After the redeploy, WeaveRelay tracks Railway deployment state and does not mark runtime verification PASS unless the new deployment reports `SUCCESS` and the proven public Railway backend domain answers a live HTTP request. Pending deployment remains WARN; failed/crashed deployment becomes FAIL.
+
+This proves deployment/runtime reachability after the approved configuration correction. It does not yet prove every application-specific Supabase query or business function succeeds; deeper functional postconditions remain the next layer.
+
+These repair paths are not yet broad production promises and must not be marketed as generally available until production provider permissions and stranger end-to-end acceptance testing pass.
 
 The existing `WEAVERELAY_CLIENT_2_SOURCE_OF_TRUTH.md` remains the locked operational baseline for Client #2 / the production marketing site. This file governs overall product direction and must not erase that rollback/baseline document.
 
