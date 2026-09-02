@@ -3,7 +3,8 @@ import { Resend } from 'resend';
 import { readConnection,readSecret } from './_workspace-store.mjs';
 import { decryptSecret } from './_vault.mjs';
 import { LIVE_PROVIDER_IDS,probeCredential,checkForProvider } from './_provider-probes.mjs';
-import { diagnoseSnapshot } from './_diagnose.mjs';
+import { diagnoseSnapshot,sanitizeSnapshot } from './_diagnose.mjs';
+import { augmentDiagnosis } from './_diagnosis-expansion.mjs';
 import { buildCrossSystemEvidence } from './_cross-system.mjs';
 import { buildEnvironmentDeploymentEvidence } from './_environment-deployment.mjs';
 import { buildRuntimePaymentsEvidence } from './_runtime-payments.mjs';
@@ -66,7 +67,8 @@ async function deepDiagnosis(workspace,observation){
   if(context.secrets.runpod){
     try{const runpod=await buildRunPodComfyUIEvidence({runpodToken:context.secrets.runpod});for(const check of runpod.checks||[])upsert(checks,check);const relationship=await buildRunPodAppRelationshipEvidence({workspace,runpodInventory:runpod.inventory});for(const check of relationship.checks||[])upsert(checks,check)}catch{upsert(checks,{id:'map.runpod-comfyui',label:'RunPod → ComfyUI',status:'WARN',detail:'RunPod is connected, but the monitor could not complete the read-only runtime relationship checks.',evidence:{source:'weaverelay-monitor-deep',computeStartedForTest:false}})}
   }
-  return diagnoseSnapshot({product:workspace.name,generatedAt:new Date().toISOString(),mode:'read-only',topology,checks});
+  const snapshot=sanitizeSnapshot({product:workspace.name,generatedAt:new Date().toISOString(),mode:'read-only',topology,checks});
+  return augmentDiagnosis(diagnoseSnapshot(snapshot),snapshot);
 }
 
 async function sendEmail(to,message){
@@ -92,7 +94,7 @@ async function processWorkspace(workspace){
     const sent=await sendEmail(email,buildRecoveryEmail({workspace,observation,checkedAt:next.lastCheckedAt}));
     if(!sent)next={...next,shouldAlertRecovery:false,recoveryAlertDeliveryFailedAt:new Date().toISOString()};
   }
-  next={...next,workspaceId:workspace.id,lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticCheckCount:diagnosis?Number(String(diagnosis.summary||'').match(/^(\d+)/)?.[1]||0):0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
+  next={...next,workspaceId:workspace.id,lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticFindingCount:diagnosis?.findings?.length||0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
   delete next.shouldAlertDown;delete next.shouldAlertRecovery;
   await monitorStore().setJSON(`state/${workspace.id}.json`,next);
   return{workspaceId:workspace.id,status:next.status,alerted:Boolean(next.alertedAt),diagnosis:next.lastDiagnosisHeadline||null};
