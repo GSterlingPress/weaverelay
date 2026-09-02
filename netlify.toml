@@ -112,6 +112,10 @@
   to = "/.netlify/functions/repair-railway-redeploy"
   status = 200
 [[redirects]]
+  from = "/api/repair/netlify-redeploy"
+  to = "/.netlify/functions/repair-netlify-redeploy"
+  status = 200
+[[redirects]]
   from = "/api/repair/stripe-webhook"
   to = "/.netlify/functions/repair-stripe-webhook"
   status = 200
