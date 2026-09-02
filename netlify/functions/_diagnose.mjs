@@ -36,34 +36,40 @@ function safeEvidence(value,depth=0){
 
 function byId(snapshot){return Object.fromEntries(snapshot.checks.map(c=>[c.id,c]));}
 function finding(id,severity,title,explanation,evidence=[],actions=[]){return{id,severity,title,explanation,evidence,actions};}
+function add(findings,check,id,severity,title,actions){if(check&&check.status!=='PASS')findings.push(finding(id,severity,title,check.detail,[check.id],actions));}
 
 export function diagnoseSnapshot(input={}){
-  const snapshot=sanitizeSnapshot(input); const c=byId(snapshot); const findings=[];
+  const snapshot=sanitizeSnapshot(input);const c=byId(snapshot);const findings=[];
   const active=snapshot.checks.filter(x=>x.status!=='SKIPPED');
 
-  if(c['netlify.preview']?.status==='PASS' && c['railway.runtime']?.status==='PASS'){
-    const front=c['netlify.preview']?.evidence?.origin;
-    const back=c['railway.runtime']?.evidence?.domain;
-    if(front&&back&&String(front).includes(String(back))){}
-  }
-  if(c['github.live']?.status==='FAIL') findings.push(finding('github-unreachable','high','GitHub connection is failing',c['github.live'].detail,['github.live'],['Reconnect GitHub with read-only repository/deployment access.']));
-  if(c['supabase.live']?.status==='FAIL') findings.push(finding('supabase-unreachable','high','Supabase connection is failing',c['supabase.live'].detail,['supabase.live'],['Verify the selected Supabase project and authorization.']));
-  if(c['stripe.live']?.status==='FAIL') findings.push(finding('stripe-unreachable','high','Stripe connection is failing',c['stripe.live'].detail,['stripe.live'],['Reconnect Stripe and re-check webhook configuration.']));
-  if(c['netlify.preview']?.status==='FAIL') findings.push(finding('frontend-unreachable','critical','The deployed frontend is not healthy',c['netlify.preview'].detail,['netlify.preview'],['Inspect the latest frontend deploy and domain configuration.']));
+  if(c['github.live']?.status==='FAIL')findings.push(finding('github-unreachable','high','GitHub connection is failing',c['github.live'].detail,['github.live'],['Reconnect GitHub with read-only repository access.']));
+  if(c['supabase.live']?.status==='FAIL')findings.push(finding('supabase-unreachable','high','Supabase connection is failing',c['supabase.live'].detail,['supabase.live'],['Verify the Supabase Management API authorization.']));
+  if(c['stripe.live']?.status==='FAIL')findings.push(finding('stripe-unreachable','high','Stripe connection is failing',c['stripe.live'].detail,['stripe.live'],['Reconnect Stripe with a restricted Balance → Read key.']));
+  if(c['app.public']?.status==='FAIL')findings.push(finding('public-app-unreachable','critical','The customer app is not reachable',c['app.public'].detail,['app.public'],['Check the production URL, DNS, and latest hosting deploy first.']));
 
-  const rp=c['runpod.readonly'];
-  const comfy=c['comfyui.readiness'];
-  if(rp?.status==='PASS' && comfy && comfy.status!=='PASS') findings.push(finding('compute-app-boundary','high','Failure boundary is after RunPod provisioning',`RunPod is reachable, but the application readiness check is ${comfy.status.toLowerCase()}: ${comfy.detail}`,['runpod.readonly','comfyui.readiness'],['Inspect container startup output and ComfyUI readiness without starting a new pod.']));
-  else if(rp?.status==='WARN') findings.push(finding('runpod-unverified','medium','RunPod is not yet verified',rp.detail,['runpod.readonly'],['Authorize read-only RunPod inspection or provide an existing pod ID.']));
+  add(findings,c['map.netlify-site'],'netlify-site-mismatch','high','The app does not match the connected Netlify site',['Verify that the app URL belongs to the Netlify account you connected.']);
+  add(findings,c['map.github-netlify'],'github-netlify-link','high','Netlify and GitHub do not agree on the source repository',['Check which GitHub repository the Netlify site is configured to build from and whether WeaveRelay can read that repository.']);
+  add(findings,c['map.github-netlify-deploy'],'github-netlify-deploy-drift','high','The deployed Netlify version is behind GitHub',['Inspect the latest Netlify deploy for the reported branch and redeploy only after confirming the intended commit.']);
+  if(c['map.app-supabase']?.status==='FAIL')findings.push(finding('supabase-project-mismatch','critical','The app points at a different Supabase project',c['map.app-supabase'].detail,['map.app-supabase'],['Compare the app’s production Supabase URL/project reference with the project in the connected Supabase account.']));
+  else add(findings,c['map.app-supabase'],'supabase-link-unproven','medium','The app-to-Supabase relationship is not fully proven',['Confirm which Supabase project this production app is intended to use.']);
+  add(findings,c['map.app-railway'],'railway-link-unproven','medium','The app-to-Railway relationship is not fully proven',['Confirm the production backend endpoint and Railway project used by this app.']);
+  add(findings,c['map.app-stripe'],'stripe-link-unproven','medium','The app-to-Stripe relationship is not fully proven',['Confirm the production Stripe account and webhook/configuration used by this app.']);
+  add(findings,c['map.cross-system'],'cross-system-map-incomplete','medium','The cross-system map could not be completed',['Run the diagnosis again and verify each connected provider is still readable.']);
+
+  const rp=c['runpod.readonly'];const comfy=c['comfyui.readiness'];
+  if(rp?.status==='PASS'&&comfy&&comfy.status!=='PASS')findings.push(finding('compute-app-boundary','high','Failure boundary is after RunPod provisioning',`RunPod is reachable, but the application readiness check is ${comfy.status.toLowerCase()}: ${comfy.detail}`,['runpod.readonly','comfyui.readiness'],['Inspect container startup output and ComfyUI readiness without starting a new pod.']));
+  else if(rp?.status==='WARN')findings.push(finding('runpod-unverified','medium','RunPod is not yet verified',rp.detail,['runpod.readonly'],['Authorize read-only RunPod inspection or provide an existing pod ID.']));
 
   for(const check of active){
     if(check.status==='WARN'&&!findings.some(f=>f.evidence.includes(check.id)))findings.push(finding(`warn-${check.id}`,'medium',`${check.label} needs attention`,check.detail,[check.id],['Verify this connection in WeaveRelay.']));
+    if(check.status==='FAIL'&&!findings.some(f=>f.evidence.includes(check.id)))findings.push(finding(`fail-${check.id}`,'high',`${check.label} failed`,check.detail,[check.id],['Inspect this failure boundary before changing another system.']));
   }
-  findings.sort((a,b)=>({critical:4,high:3,medium:2,low:1}[b.severity]-({critical:4,high:3,medium:2,low:1}[a.severity])));
+
+  findings.sort((a,b)=>({critical:4,high:3,medium:2,low:1}[b.severity]-({critical:4,high:3,medium:2,low:1}[a.severity]));
   const worst=active.reduce((m,x)=>rank[x.status]>rank[m]?x.status:m,'PASS');
   const passed=active.filter(x=>x.status==='PASS').length;
-  const headline=findings[0]?.title || (worst==='PASS'?'No cross-system failure found in the current read-only snapshot':'More connection evidence is needed');
-  return {
+  const headline=findings[0]?.title||(worst==='PASS'?'No cross-system failure found in the current read-only snapshot':'More connection evidence is needed');
+  return{
     mode:'read-only',
     status:worst==='FAIL'?'broken':findings.length?'attention':'healthy',
     headline,
