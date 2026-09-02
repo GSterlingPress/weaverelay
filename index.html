@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="WeaveRelay checks the systems behind your app, maps how they work together, and shows you where something is broken." />
+  <meta name="theme-color" content="#07110f" />
+  <title>WeaveRelay — Know where your backend broke</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="WeaveRelay home">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>WeaveRelay</span>
+    </a>
+    <nav aria-label="Primary navigation">
+      <a href="#how">How it works</a>
+      <a href="#proof">Live proof</a>
+      <a href="#security">Security</a>
+    </nav>
+    <a class="button button-small button-ghost" href="#early-access">Join Early Access</a>
+  </header>
+
+  <main id="top">
+    <section class="hero wrap">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="pulse"></span> Private beta opening soon</div>
+        <h1>Your app has five dashboards.<br><em>You need one answer.</em></h1>
+        <p class="hero-lede">Connect your backend. WeaveRelay checks the systems behind your app, maps how they work together, and shows you where something is broken.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#early-access">Get Early Access <span>→</span></a>
+          <a class="text-link" href="#proof">See the working proof <span>↓</span></a>
+        </div>
+        <p class="microcopy">Read-only by default. Minimum permissions. No automatic fixes.</p>
+      </div>
+
+      <div class="hero-product" aria-label="WeaveRelay diagnostic report example">
+        <div class="app-chrome">
+          <div class="chrome-dots"><i></i><i></i><i></i></div>
+          <span>studio-one / production</span>
+          <span class="verified"><b></b> verified proof</span>
+        </div>
+        <div class="product-head">
+          <div>
+            <span class="kicker">STACK HEALTH</span>
+            <h2>Everything is connected.</h2>
+          </div>
+          <div class="score"><strong>5</strong><span>/ 5 PASS</span></div>
+        </div>
+        <div class="provider-grid">
+          <article class="provider"><span class="provider-icon">GH</span><div><strong>GitHub</strong><small>Source & authorization</small></div><span class="status pass">PASS</span></article>
+          <article class="provider"><span class="provider-icon">N</span><div><strong>Netlify</strong><small>Website deployment</small></div><span class="status pass">PASS</span></article>
+          <article class="provider"><span class="provider-icon">R</span><div><strong>Railway</strong><small>Backend runtime</small></div><span class="status pass">PASS</span></article>
+          <article class="provider"><span class="provider-icon">S</span><div><strong>Supabase</strong><small>Production data service</small></div><span class="status pass">PASS</span></article>
+          <article class="provider"><span class="provider-icon">$</span><div><strong>Stripe</strong><small>Payment system</small></div><span class="status pass">PASS</span></article>
+        </div>
+        <div class="trace">
+          <span>GitHub</span><i></i><span>Netlify</span><i></i><span>Railway</span><i></i><span>Supabase</span><i></i><span>Stripe</span>
+        </div>
+        <div class="proof-note"><span>✓</span> Real read-only probes · verified September 2, 2026</div>
+      </div>
+    </section>
+
+    <section class="pain-band">
+      <div class="wrap pain-inner">
+        <p class="pain-quote">“Is it the deploy? The environment variable? The database? The payment key?”</p>
+        <p class="pain-answer">Stop tab-hopping until something turns green. <strong>Ask the stack.</strong></p>
+      </div>
+    </section>
+
+    <section class="section wrap" id="how">
+      <div class="section-label">HOW IT WORKS</div>
+      <div class="section-intro">
+        <h2>From scattered dashboards<br>to one clear diagnosis.</h2>
+        <p>WeaveRelay looks across the systems your application depends on, instead of making you investigate each one in isolation.</p>
+      </div>
+      <div class="steps">
+        <article class="step">
+          <span class="step-num">01</span>
+          <div class="step-icon connect-icon"><i></i><i></i><i></i></div>
+          <h3>CONNECT</h3>
+          <p>Link the supported services behind your application using the smallest permissions needed to check them.</p>
+        </article>
+        <div class="step-arrow" aria-hidden="true">→</div>
+        <article class="step">
+          <span class="step-num">02</span>
+          <div class="step-icon map-icon"><i></i><i></i><i></i><b></b></div>
+          <h3>MAP</h3>
+          <p>See how source, deployment, runtime, data and payments relate instead of treating them as five separate worlds.</p>
+        </article>
+        <div class="step-arrow" aria-hidden="true">→</div>
+        <article class="step">
+          <span class="step-num">03</span>
+          <div class="step-icon diagnose-icon"><i></i></div>
+          <h3>DIAGNOSE</h3>
+          <p>Run live read-only checks and get a simple PASS, WARN, FAIL or SKIPPED result with the failure boundary called out.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section section-dark" id="proof">
+      <div class="wrap">
+        <div class="section-label">PROVEN ON A REAL APP</div>
+        <div class="proof-layout">
+          <div class="proof-copy">
+            <h2>Not a mockup.<br>Not five fake green dots.</h2>
+            <p>WeaveRelay Client #1 is Studio One. Its current proof checks five live systems with read-only probes and reports the result in one place.</p>
+            <div class="proof-facts">
+              <div><strong>5 / 5</strong><span>live providers passing</span></div>
+              <div><strong>0</strong><span>write permissions required for the proof</span></div>
+              <div><strong>1</strong><span>place to see the stack</span></div>
+            </div>
+          </div>
+          <div class="diagnosis-card">
+            <div class="diagnosis-top"><span>EXAMPLE FAILURE BOUNDARY</span><span class="status fail">FAIL</span></div>
+            <div class="mini-map">
+              <span class="node ok">GitHub <b>✓</b></span><i></i>
+              <span class="node ok">Netlify <b>✓</b></span><i class="broken"></i>
+              <span class="node bad">Railway <b>!</b></span><i></i>
+              <span class="node muted">Supabase</span>
+            </div>
+            <div class="diagnosis-message">
+              <span class="alert-icon">!</span>
+              <div><strong>The source and frontend deploy are healthy.</strong><p>The first failing boundary appears at the backend runtime. Start there instead of checking every dashboard.</p></div>
+            </div>
+            <p class="example-label">Illustrative diagnosis — shown to explain the product, not a live customer result.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section wrap providers-section">
+      <div class="section-label">SUPPORTED IN EARLY ACCESS</div>
+      <div class="section-intro compact">
+        <h2>Start with the stack<br>we have actually proven.</h2>
+        <p>No giant logo wall of “coming soon” integrations. Early Access begins with five systems we have working today.</p>
+      </div>
+      <div class="big-providers">
+        <div><span>GH</span><strong>GitHub</strong></div>
+        <div><span>N</span><strong>Netlify</strong></div>
+        <div><span>R</span><strong>Railway</strong></div>
+        <div><span>S</span><strong>Supabase</strong></div>
+        <div><span>$</span><strong>Stripe</strong></div>
+      </div>
+    </section>
+
+    <section class="section security" id="security">
+      <div class="wrap security-layout">
+        <div>
+          <div class="section-label">PRIVACY FIRST</div>
+          <h2>Look deeply.<br>Touch lightly.</h2>
+        </div>
+        <div class="security-grid">
+          <article><span>01</span><h3>Read-only diagnostics</h3><p>The initial product is designed to inspect and explain—not change your infrastructure behind your back.</p></article>
+          <article><span>02</span><h3>Minimum permission</h3><p>We ask for the smallest practical access needed for each check and keep provider credentials server-side.</p></article>
+          <article><span>03</span><h3>Redacted reports</h3><p>Public-facing diagnostic results should not expose provider tokens, account IDs or other sensitive connection details.</p></article>
+          <article><span>04</span><h3>No “Fix It” yet</h3><p>Automatic repairs are intentionally outside the initial Early Access product. Diagnosis comes first.</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section" id="early-access">
+      <div class="wrap cta-card">
+        <div class="cta-copy">
+          <div class="eyebrow"><span class="pulse"></span> EARLY ACCESS</div>
+          <h2>Spend less time<br>chasing broken connections.</h2>
+          <p>We’re opening WeaveRelay to a small group of software builders. Join the list and tell us what your backend runs on.</p>
+        </div>
+        <form class="access-form" name="weaverelay-early-access" method="POST" data-netlify="true" action="/thanks.html">
+          <input type="hidden" name="form-name" value="weaverelay-early-access" />
+          <label for="email">Work email</label>
+          <div class="input-row"><input id="email" name="email" type="email" autocomplete="email" placeholder="you@company.com" required /><button class="button button-primary" type="submit">Join Early Access <span>→</span></button></div>
+          <label for="stack">What do you use? <small>Optional</small></label>
+          <input id="stack" name="stack" type="text" placeholder="e.g. GitHub, Netlify, Supabase, Stripe" />
+          <p>No spam. We’ll use this only for WeaveRelay Early Access.</p>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer wrap">
+    <a class="brand" href="#top"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>WeaveRelay</span></a>
+    <p>CONNECT → MAP → DIAGNOSE</p>
+    <p>© 2026 WeaveRelay. Early Access.</p>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>
