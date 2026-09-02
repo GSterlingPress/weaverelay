@@ -6,6 +6,7 @@ import{probeCredential,checkForProvider}from'./_provider-probes.mjs';
 import{buildCrossSystemEvidence}from'./_cross-system.mjs';
 import{buildEnvironmentDeploymentEvidence}from'./_environment-deployment.mjs';
 import{buildRuntimePaymentsEvidence}from'./_runtime-payments.mjs';
+import{verifyRailwayRepairRuntime}from'./_railway-redeploy-repair.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const upsert=(checks,live)=>{const ix=checks.findIndex(c=>c.id===live.id);if(ix>=0)checks[ix]=live;else checks.push(live)};
@@ -66,6 +67,18 @@ export default async request=>{
       for(const check of runtimePayments.checks)upsert(checks,check);
     }catch{
       upsert(checks,{id:'runtime.payments-truth',label:'Runtime / payment boundary',status:'WARN',detail:'The live provider checks completed, but Railway runtime or Stripe webhook metadata could not be fully evaluated.',evidence:{source:'weaverelay-runtime-payments'}});
+    }
+
+    if(workspace.lastRepair?.type==='railway-supabase-url'&&workspace.lastRepair?.configurationVerified===true){
+      try{
+        const runtime=await verifyRailwayRepairRuntime({workspace,railwayToken:secrets.railway});
+        if(runtime){
+          upsert(checks,{id:'repair.railway-runtime',label:'Repaired Railway runtime',status:runtime.status,detail:runtime.detail,evidence:{source:'weaverelay-repair-verification',...(runtime.evidence||{})}});
+          if(runtime.evidence?.runtimeVerified===true){workspace.lastRepair={...workspace.lastRepair,runtimeVerified:true,verifiedAt:now};}
+        }
+      }catch{
+        upsert(checks,{id:'repair.railway-runtime',label:'Repaired Railway runtime',status:'WARN',detail:'The configuration repair is saved, but runtime verification could not complete in this diagnosis.',evidence:{source:'weaverelay-repair-verification',runtimeVerified:false}});
+      }
     }
 
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,topology,checks});
