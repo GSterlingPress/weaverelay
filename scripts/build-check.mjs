@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 
-const roots=['wr-control.js','script.js','netlify/functions'];
+const roots=['wr-control.js','wr-runpod-control.js','script.js','netlify/functions'];
 const files=[];
 for(const root of roots){
   if(!fs.existsSync(root))continue;
