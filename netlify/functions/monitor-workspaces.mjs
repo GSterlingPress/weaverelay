@@ -10,6 +10,7 @@ import { buildEnvironmentDeploymentEvidence } from './_environment-deployment.mj
 import { buildRuntimePaymentsEvidence } from './_runtime-payments.mjs';
 import { buildRunPodComfyUIEvidence } from './_runpod-comfyui-proof.mjs';
 import { buildRunPodAppRelationshipEvidence } from './_runpod-app-relationship.mjs';
+import { classifyOperationalHealth } from './_functional-monitoring.mjs';
 import { probePublicSite,advanceMonitorState,normalizeMonitoring,isMonitorDue,buildOutageEmail,buildRecoveryEmail } from './_monitoring.mjs';
 
 const control=()=>getStore({name:'weaverelay-control-plane',consistency:'strong'});
@@ -61,14 +62,14 @@ async function deepDiagnosis(workspace,observation){
   const context=await providerContext(workspace);
   for(const check of context.checks)upsert(checks,check);
   let topology=workspace.stackMap||{};
-  try{const cross=await buildCrossSystemEvidence({workspace,secrets:context.secrets});for(const check of cross.checks||[])upsert(checks,check);if(cross.map)topology=cross.map}catch{upsert(checks,{id:'map.cross-system',label:'Cross-system map',status:'WARN',detail:'The outage monitor could not complete the full cross-system map during this incident.',evidence:{source:'weaverelay-monitor-deep'}})}
-  try{const env=await buildEnvironmentDeploymentEvidence({workspace,secrets:context.secrets});for(const check of env.checks||[])upsert(checks,check)}catch{upsert(checks,{id:'env.deployment-truth',label:'Environment / deployment truth',status:'WARN',detail:'The outage monitor could not complete environment/deployment evidence for this incident.',evidence:{source:'weaverelay-monitor-deep'}})}
-  try{const runtime=await buildRuntimePaymentsEvidence({workspace,secrets:context.secrets});for(const check of runtime.checks||[])upsert(checks,check)}catch{upsert(checks,{id:'runtime.payments-truth',label:'Runtime / payment boundary',status:'WARN',detail:'The outage monitor could not complete runtime/payment evidence for this incident.',evidence:{source:'weaverelay-monitor-deep'}})}
+  try{const cross=await buildCrossSystemEvidence({workspace,secrets:context.secrets});for(const check of cross.checks||[])upsert(checks,check);if(cross.map)topology=cross.map}catch{upsert(checks,{id:'map.cross-system',label:'Cross-system map',status:'WARN',detail:'The monitor could not complete the full cross-system map.',evidence:{source:'weaverelay-monitor-deep'}})}
+  try{const env=await buildEnvironmentDeploymentEvidence({workspace,secrets:context.secrets});for(const check of env.checks||[])upsert(checks,check)}catch{upsert(checks,{id:'env.deployment-truth',label:'Environment / deployment truth',status:'WARN',detail:'The monitor could not complete environment/deployment evidence.',evidence:{source:'weaverelay-monitor-deep'}})}
+  try{const runtime=await buildRuntimePaymentsEvidence({workspace,secrets:context.secrets});for(const check of runtime.checks||[])upsert(checks,check)}catch{upsert(checks,{id:'runtime.payments-truth',label:'Runtime / payment boundary',status:'WARN',detail:'The monitor could not complete runtime/payment evidence.',evidence:{source:'weaverelay-monitor-deep'}})}
   if(context.secrets.runpod){
     try{const runpod=await buildRunPodComfyUIEvidence({runpodToken:context.secrets.runpod});for(const check of runpod.checks||[])upsert(checks,check);const relationship=await buildRunPodAppRelationshipEvidence({workspace,runpodInventory:runpod.inventory});for(const check of relationship.checks||[])upsert(checks,check)}catch{upsert(checks,{id:'map.runpod-comfyui',label:'RunPod → ComfyUI',status:'WARN',detail:'RunPod is connected, but the monitor could not complete the read-only runtime relationship checks.',evidence:{source:'weaverelay-monitor-deep',computeStartedForTest:false}})}
   }
   const snapshot=sanitizeSnapshot({product:workspace.name,generatedAt:new Date().toISOString(),mode:'read-only',topology,checks});
-  return augmentDiagnosis(diagnoseSnapshot(snapshot),snapshot);
+  return{diagnosis:augmentDiagnosis(diagnoseSnapshot(snapshot),snapshot),checks:snapshot.checks||checks};
 }
 
 async function sendEmail(to,message){
@@ -83,9 +84,11 @@ async function processWorkspace(workspace){
   const monitoring=normalizeMonitoring(workspace.monitoring);
   const previous=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'}).catch(()=>null)||{};
   if(!isMonitorDue(previous,monitoring))return{workspaceId:workspace.id,status:previous.status||'unknown',skipped:'interval'};
-  const observation=await probePublicSite(workspace.siteOrigin);
-  let diagnosis=null;
-  if(observation.status!=='healthy')diagnosis=await deepDiagnosis(workspace,observation).catch(()=>null);
+  const siteObservation=await probePublicSite(workspace.siteOrigin);
+  const deep=await deepDiagnosis(workspace,siteObservation).catch(()=>null);
+  const diagnosis=deep?.diagnosis||null;
+  const operational=classifyOperationalHealth({siteObservation,checks:deep?.checks||[]});
+  const observation={...siteObservation,status:operational.status,detail:operational.detail,incidentKind:operational.incidentKind,evidenceId:operational.evidenceId};
   let next=advanceMonitorState(previous,observation,monitoring);
   const email=await ownerEmail(workspace.ownerId);
   if(next.shouldAlertDown){
@@ -95,10 +98,10 @@ async function processWorkspace(workspace){
     const sent=await sendEmail(email,buildRecoveryEmail({workspace,observation,checkedAt:next.lastCheckedAt}));
     if(!sent)next={...next,status:'broken',incidentId:previous.incidentId||next.incidentId,alertedAt:previous.alertedAt||null,recoveredAt:null,shouldAlertRecovery:false,recoveryAlertDeliveryFailedAt:new Date().toISOString()};
   }
-  next={...next,workspaceId:workspace.id,lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticFindingCount:diagnosis?.findings?.length||0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
+  next={...next,workspaceId:workspace.id,incidentKind:operational.incidentKind,evidenceId:operational.evidenceId,publicSiteHealthy:Boolean(operational.publicSiteHealthy),lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticFindingCount:diagnosis?.findings?.length||0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
   delete next.shouldAlertDown;delete next.shouldAlertRecovery;
   await monitorStore().setJSON(`state/${workspace.id}.json`,next);
-  return{workspaceId:workspace.id,status:next.status,alerted:Boolean(next.alertedAt),diagnosis:next.lastDiagnosisHeadline||null};
+  return{workspaceId:workspace.id,status:next.status,incidentKind:next.incidentKind,alerted:Boolean(next.alertedAt),diagnosis:next.lastDiagnosisHeadline||null};
 }
 
 export default async()=>{
