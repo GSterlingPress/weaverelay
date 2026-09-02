@@ -1,0 +1,14 @@
+import test from'node:test';import assert from'node:assert/strict';
+import{verifyStripeWebhookDelivery}from'../netlify/functions/_stripe-delivery-proof.mjs';
+
+const workspace={lastRepair:{type:'stripe-webhook-host',configurationVerified:true,endpointId:'we_123',targetHost:'api.example.up.railway.app',approvedAt:'2026-09-02T16:00:00.000Z'}};
+function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json'}})}
+function fetchFor({events=[],endpoints=[{id:'we_123',status:'enabled',url:'https://api.example.up.railway.app/api/stripe/webhook',enabled_events:['checkout.session.completed']}]}={}){return async url=>{const u=String(url);if(u.includes('/v1/webhook_endpoints/we_123'))return json(endpoints[0]);if(u.includes('/v1/webhook_endpoints?'))return json({data:endpoints});if(u.includes('/v1/events?'))return json({data:events});throw new Error(`unexpected ${u}`)}}
+
+test('PASS requires a real matching post-repair Stripe event with zero pending webhooks',async()=>{const result=await verifyStripeWebhookDelivery({workspace,stripeToken:'rk_test_x',fetchImpl:fetchFor({events:[{type:'checkout.session.completed',created:1788364860,pending_webhooks:0,data:{object:{secret:'must-not-leak'}}}]}),nowMs:1788365000000});assert.equal(result.status,'PASS');assert.equal(result.evidence.deliveryVerified,true);assert.equal(JSON.stringify(result).includes('must-not-leak'),false)});
+
+test('WARN when no matching post-repair event exists instead of manufacturing traffic',async()=>{const result=await verifyStripeWebhookDelivery({workspace,stripeToken:'rk_test_x',fetchImpl:fetchFor({events:[{type:'customer.created',created:1788364860,pending_webhooks:0}]}),nowMs:1788365000000});assert.equal(result.status,'WARN');assert.equal(result.evidence.matchingEventCount,0);assert.match(result.detail,/will not create a financial event/i)});
+
+test('FAIL isolates correct URL but still-pending delivery after grace period',async()=>{const result=await verifyStripeWebhookDelivery({workspace,stripeToken:'rk_test_x',fetchImpl:fetchFor({events:[{type:'checkout.session.completed',created:1788364000,pending_webhooks:1}]}),nowMs:1788365000000});assert.equal(result.status,'FAIL');assert.equal(result.evidence.deliveryVerified,false);assert.match(result.detail,/handler|delivery/i)});
+
+test('WARN when more than one enabled endpoint prevents exact delivery attribution',async()=>{const endpoints=[{id:'we_123',status:'enabled',url:'https://api.example.up.railway.app/api/stripe/webhook',enabled_events:['*']},{id:'we_456',status:'enabled',url:'https://other.example.com/webhook',enabled_events:['*']}];const result=await verifyStripeWebhookDelivery({workspace,stripeToken:'rk_test_x',fetchImpl:fetchFor({endpoints,events:[]}),nowMs:1788365000000});assert.equal(result.status,'WARN');assert.equal(result.evidence.enabledEndpointCount,2)});
