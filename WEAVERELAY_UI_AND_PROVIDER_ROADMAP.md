@@ -11,6 +11,22 @@ The customer application should visibly reserve a RunPod provider card now, but 
 
 RunPod spend, GPU provisioning, endpoint creation/deletion, and other financially meaningful compute actions are not routine diagnostic writes. They require explicit authenticated approval and must not be performed merely to test a connection.
 
+## Seventh backend layer: ComfyUI
+
+ComfyUI is a separate open-source workflow/runtime application, not a component that exists only inside RunPod. It can run locally, on another host, on a RunPod Pod, or behind a RunPod Serverless endpoint. RunPod therefore represents the **compute/infrastructure layer**, while ComfyUI represents the **workflow/API application layer**.
+
+WeaveRelay will treat ComfyUI as the seventh backend integration/test card because both layers can fail independently. A RunPod endpoint can be healthy while the ComfyUI workflow/API is broken, and ComfyUI can be healthy while the RunPod compute or endpoint configuration is unhealthy.
+
+The customer application should reserve a ComfyUI card now labeled **COMING NEXT**. Future diagnosis should separately prove, where applicable:
+
+- RunPod account / Pod / Serverless endpoint health;
+- the intended RunPod endpoint belongs to this app;
+- ComfyUI is actually reachable on the intended runtime;
+- the expected ComfyUI API/workflow contract exists;
+- required models/custom nodes/workflow dependencies are present where safe to inspect;
+- app → RunPod → ComfyUI relationships agree;
+- any GPU provisioning, scaling, storage, or spend-affecting repair remains separately approval-gated.
+
 ## Next-fix guidance under provider cards
 
 A customer must never finish a diagnosis wondering what to click next.
@@ -26,7 +42,7 @@ Current deterministic behavior is the safe baseline:
 
 Future AI assistance may rewrite or prioritize this message for clarity, but AI must not invent provider state, repair eligibility, exact destinations, or approval requirements. The underlying diagnosis remains evidence-driven and deterministic; AI may explain the next action, not manufacture it.
 
-## Stripe handler-secret repair UI
+## Stripe handler-secret repair UI and verification chain
 
 When failing-handler diagnosis proves exactly one missing Stripe webhook-signature configuration name, WeaveRelay may expose **ADD WEBHOOK SECRET**.
 
@@ -39,3 +55,5 @@ The customer enters the `whsec_...` value only inside a password-style field on 
 5. never echo or redisplay the secret;
 6. keep production redeploy as a separate later approval step;
 7. require post-redeploy real Stripe delivery evidence before the chain can become PASS.
+
+The redeploy verifier now supports this handler-secret repair as well as the Railway → Supabase repair. After the secret variable is saved, **REDEPLOY & VERIFY** targets only the already-proven Railway service/environment. A successful Railway deployment plus live backend reachability is required before Stripe delivery verification resumes. Stripe delivery proof then considers only events after the latest handler-repair/redeploy boundary, so an older successful event cannot falsely verify the new repair.
