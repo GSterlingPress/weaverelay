@@ -65,7 +65,8 @@ export function diagnoseSnapshot(input={}){
     if(check.status==='FAIL'&&!findings.some(f=>f.evidence.includes(check.id)))findings.push(finding(`fail-${check.id}`,'high',`${check.label} failed`,check.detail,[check.id],['Inspect this failure boundary before changing another system.']));
   }
 
-  findings.sort((a,b)=>({critical:4,high:3,medium:2,low:1}[b.severity]-({critical:4,high:3,medium:2,low:1}[a.severity]));
+  const severityRank={critical:4,high:3,medium:2,low:1};
+  findings.sort((a,b)=>(severityRank[b.severity]||0)-(severityRank[a.severity]||0));
   const worst=active.reduce((m,x)=>rank[x.status]>rank[m]?x.status:m,'PASS');
   const passed=active.filter(x=>x.status==='PASS').length;
   const headline=findings[0]?.title||(worst==='PASS'?'No cross-system failure found in the current read-only snapshot':'More connection evidence is needed');
