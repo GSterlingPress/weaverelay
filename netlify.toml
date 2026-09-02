@@ -50,7 +50,7 @@
   to = "/.netlify/functions/workspace-claim-client"
   status = 200
 
-# Provider authorization + read-only probes
+# Provider authorization + diagnostics
 [[redirects]]
   from = "/api/provider/start"
   to = "/.netlify/functions/provider-start"
@@ -68,15 +68,59 @@
   to = "/.netlify/functions/provider-disconnect"
   status = 200
 [[redirects]]
+  from = "/api/provider/window"
+  to = "/.netlify/functions/provider-window"
+  status = 200
+[[redirects]]
+  from = "/api/provider/window/netlify"
+  to = "/.netlify/functions/provider-window-netlify"
+  status = 200
+[[redirects]]
+  from = "/api/provider/window/supabase"
+  to = "/.netlify/functions/provider-window-supabase"
+  status = 200
+[[redirects]]
   from = "/api/oauth/github/callback"
   to = "/.netlify/functions/oauth-github-callback"
   status = 200
 [[redirects]]
   from = "/api/diagnose"
-  to = "/.netlify/functions/diagnose-workspace"
+  to = "/.netlify/functions/diagnose-workspace-expanded"
   status = 200
 
-# Studio One is Client #1. It seeds evidence; provider OAuth becomes source of truth.
+# RunPod controls — exact reviewed Pods only; stopping requires explicit approval
+[[redirects]]
+  from = "/api/runpod/pods"
+  to = "/.netlify/functions/runpod-pods"
+  status = 200
+[[redirects]]
+  from = "/api/runpod/stop"
+  to = "/.netlify/functions/runpod-stop-pod"
+  status = 200
+[[redirects]]
+  from = "/api/runpod/stop-all"
+  to = "/.netlify/functions/runpod-stop-all"
+  status = 200
+
+# Approved, narrowly scoped repairs
+[[redirects]]
+  from = "/api/repair/railway-supabase"
+  to = "/.netlify/functions/repair-railway-supabase"
+  status = 200
+[[redirects]]
+  from = "/api/repair/railway-redeploy"
+  to = "/.netlify/functions/repair-railway-redeploy"
+  status = 200
+[[redirects]]
+  from = "/api/repair/stripe-webhook"
+  to = "/.netlify/functions/repair-stripe-webhook"
+  status = 200
+[[redirects]]
+  from = "/api/repair/stripe-handler-secret"
+  to = "/.netlify/functions/repair-stripe-handler-secret"
+  status = 200
+
+# Studio One is Client #1. It seeds evidence; provider authorization becomes source of truth.
 [[redirects]]
   from = "/api/relay/handshake"
   to = "/.netlify/functions/relay-handshake"

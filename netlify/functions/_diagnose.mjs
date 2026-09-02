@@ -1,76 +1,37 @@
 const rank={PASS:0,SKIPPED:1,WARN:2,FAIL:3};
 const clean=v=>String(v??'').trim();
 
-export function sanitizeSnapshot(input={}){
-  const checks=Array.isArray(input.checks)?input.checks:[];
-  return {
-    product:clean(input.product).slice(0,80)||'Unknown app',
-    version:clean(input.version).slice(0,80)||null,
-    generatedAt:clean(input.generatedAt)||new Date().toISOString(),
-    mode:'read-only',
-    topology:input.topology&&typeof input.topology==='object'?input.topology:{},
-    checks:checks.slice(0,100).map(c=>({
-      id:clean(c.id).slice(0,120),
-      label:clean(c.label).slice(0,120),
-      status:['PASS','WARN','FAIL','SKIPPED'].includes(c.status)?c.status:'WARN',
-      detail:clean(c.detail).slice(0,1000),
-      evidence:safeEvidence(c.evidence)
-    })).filter(c=>c.id)
-  };
-}
-function safeEvidence(value,depth=0){
-  if(depth>3||value==null)return null;
-  if(typeof value==='string')return value.slice(0,500);
-  if(typeof value==='number'||typeof value==='boolean')return value;
-  if(Array.isArray(value))return value.slice(0,20).map(v=>safeEvidence(v,depth+1));
-  if(typeof value==='object'){
-    const out={};
-    for(const [k,v] of Object.entries(value).slice(0,30)){
-      if(/secret|token|password|key|authorization|cookie/i.test(k))continue;
-      out[k.slice(0,80)]=safeEvidence(v,depth+1);
-    }
-    return out;
-  }
-  return null;
-}
-
-function byId(snapshot){return Object.fromEntries(snapshot.checks.map(c=>[c.id,c]));}
-function finding(id,severity,title,explanation,evidence=[],actions=[]){return{id,severity,title,explanation,evidence,actions};}
-
-export function diagnoseSnapshot(input={}){
-  const snapshot=sanitizeSnapshot(input); const c=byId(snapshot); const findings=[];
-  const active=snapshot.checks.filter(x=>x.status!=='SKIPPED');
-
-  if(c['netlify.preview']?.status==='PASS' && c['railway.runtime']?.status==='PASS'){
-    const front=c['netlify.preview']?.evidence?.origin;
-    const back=c['railway.runtime']?.evidence?.domain;
-    if(front&&back&&String(front).includes(String(back))){}
-  }
-  if(c['github.live']?.status==='FAIL') findings.push(finding('github-unreachable','high','GitHub connection is failing',c['github.live'].detail,['github.live'],['Reconnect GitHub with read-only repository/deployment access.']));
-  if(c['supabase.live']?.status==='FAIL') findings.push(finding('supabase-unreachable','high','Supabase connection is failing',c['supabase.live'].detail,['supabase.live'],['Verify the selected Supabase project and authorization.']));
-  if(c['stripe.live']?.status==='FAIL') findings.push(finding('stripe-unreachable','high','Stripe connection is failing',c['stripe.live'].detail,['stripe.live'],['Reconnect Stripe and re-check webhook configuration.']));
-  if(c['netlify.preview']?.status==='FAIL') findings.push(finding('frontend-unreachable','critical','The deployed frontend is not healthy',c['netlify.preview'].detail,['netlify.preview'],['Inspect the latest frontend deploy and domain configuration.']));
-
-  const rp=c['runpod.readonly'];
-  const comfy=c['comfyui.readiness'];
-  if(rp?.status==='PASS' && comfy && comfy.status!=='PASS') findings.push(finding('compute-app-boundary','high','Failure boundary is after RunPod provisioning',`RunPod is reachable, but the application readiness check is ${comfy.status.toLowerCase()}: ${comfy.detail}`,['runpod.readonly','comfyui.readiness'],['Inspect container startup output and ComfyUI readiness without starting a new pod.']));
-  else if(rp?.status==='WARN') findings.push(finding('runpod-unverified','medium','RunPod is not yet verified',rp.detail,['runpod.readonly'],['Authorize read-only RunPod inspection or provide an existing pod ID.']));
-
-  for(const check of active){
-    if(check.status==='WARN'&&!findings.some(f=>f.evidence.includes(check.id)))findings.push(finding(`warn-${check.id}`,'medium',`${check.label} needs attention`,check.detail,[check.id],['Verify this connection in WeaveRelay.']));
-  }
-  findings.sort((a,b)=>({critical:4,high:3,medium:2,low:1}[b.severity]-({critical:4,high:3,medium:2,low:1}[a.severity])));
-  const worst=active.reduce((m,x)=>rank[x.status]>rank[m]?x.status:m,'PASS');
-  const passed=active.filter(x=>x.status==='PASS').length;
-  const headline=findings[0]?.title || (worst==='PASS'?'No cross-system failure found in the current read-only snapshot':'More connection evidence is needed');
-  return {
-    mode:'read-only',
-    status:worst==='FAIL'?'broken':findings.length?'attention':'healthy',
-    headline,
-    summary:`${passed} of ${active.length} active checks passed. ${findings.length} diagnostic finding${findings.length===1?'':'s'}.`,
-    findings,
-    safeRepairs:findings.flatMap(f=>f.actions.map(action=>({finding:f.id,action,automatic:false}))).slice(0,20),
-    destructiveChangesAllowed:false,
-    diagnosedAt:new Date().toISOString()
-  };
-}
+const PROVIDERS={github:{label:'GitHub',url:'https://github.com/'},netlify:{label:'Netlify',url:'https://app.netlify.com/'},railway:{label:'Railway',url:'https://railway.com/dashboard'},supabase:{label:'Supabase',url:'https://supabase.com/dashboard'},stripe:{label:'Stripe',url:'https://dashboard.stripe.com/webhooks'}};
+export function sanitizeSnapshot(input={}){const checks=Array.isArray(input.checks)?input.checks:[];return{product:clean(input.product).slice(0,80)||'Unknown app',version:clean(input.version).slice(0,80)||null,generatedAt:clean(input.generatedAt)||new Date().toISOString(),mode:'read-only',topology:input.topology&&typeof input.topology==='object'?input.topology:{},checks:checks.slice(0,100).map(c=>({id:clean(c.id).slice(0,120),label:clean(c.label).slice(0,120),status:['PASS','WARN','FAIL','SKIPPED'].includes(c.status)?c.status:'WARN',detail:clean(c.detail).slice(0,1000),evidence:safeEvidence(c.evidence)})).filter(c=>c.id)}}
+function safeEvidence(value,depth=0){if(depth>3||value==null)return null;if(typeof value==='string')return value.slice(0,500);if(typeof value==='number'||typeof value==='boolean')return value;if(Array.isArray(value))return value.slice(0,20).map(v=>safeEvidence(v,depth+1));if(typeof value==='object'){const out={};for(const[k,v]of Object.entries(value).slice(0,30)){if(/secret|token|password|key|authorization|cookie/i.test(k))continue;out[k.slice(0,80)]=safeEvidence(v,depth+1)}return out}return null}
+function byId(snapshot){return Object.fromEntries(snapshot.checks.map(c=>[c.id,c]))}
+function finding(id,severity,title,explanation,evidence=[],actions=[],provider=null,repair=null){const p=provider?PROVIDERS[provider]:null;return{id,severity,title,explanation,evidence,actions,provider:provider||null,repair:repair||{supported:false,approvalRequired:true,label:'Guided repair coming next'},openProvider:p?{label:`Open ${p.label}`,url:p.url}:null}}
+function reconnectRepair(provider){return{supported:true,approvalRequired:true,type:'reconnect-provider',provider,label:`Reconnect ${PROVIDERS[provider]?.label||provider}`}}
+function add(findings,check,id,severity,title,actions,provider=null,repair=null){if(check&&check.status!=='PASS')findings.push(finding(id,severity,title,check.detail,[check.id],actions,provider,repair))}
+export function diagnoseSnapshot(input={}){const snapshot=sanitizeSnapshot(input);const c=byId(snapshot);const findings=[];const active=snapshot.checks.filter(x=>x.status!=='SKIPPED');
+if(c['github.live']?.status==='FAIL')findings.push(finding('github-unreachable','high','GitHub connection is failing',c['github.live'].detail,['github.live'],['Reconnect GitHub, then WeaveRelay will verify the connection again.'],'github',reconnectRepair('github')));
+if(c['supabase.live']?.status==='FAIL')findings.push(finding('supabase-unreachable','high','Supabase connection is failing',c['supabase.live'].detail,['supabase.live'],['Reconnect Supabase, then WeaveRelay will verify the credential before saving it.'],'supabase',reconnectRepair('supabase')));
+if(c['railway.runtime']?.status==='FAIL')findings.push(finding('railway-unreachable','high','Railway connection is failing',c['railway.runtime'].detail,['railway.runtime'],['Reconnect Railway, then WeaveRelay will verify the credential before saving it.'],'railway',reconnectRepair('railway')));
+if(c['netlify.account']?.status==='FAIL')findings.push(finding('netlify-unreachable','high','Netlify connection is failing',c['netlify.account'].detail,['netlify.account'],['Reconnect Netlify, then WeaveRelay will verify the credential before saving it.'],'netlify',reconnectRepair('netlify')));
+if(c['stripe.live']?.status==='FAIL')findings.push(finding('stripe-unreachable','high','Stripe connection is failing',c['stripe.live'].detail,['stripe.live'],['Reconnect Stripe with the required restricted permission; WeaveRelay will verify it before saving it.'],'stripe',reconnectRepair('stripe')));
+if(c['app.public']?.status==='FAIL')findings.push(finding('public-app-unreachable','critical','The customer app is not reachable',c['app.public'].detail,['app.public'],['Check the production URL, DNS, and latest hosting deploy first.'],'netlify'));
+add(findings,c['map.netlify-site'],'netlify-site-mismatch','high','The app does not match the connected Netlify site',['Verify that the app URL belongs to the Netlify account you connected.'],'netlify');
+add(findings,c['map.github-netlify'],'github-netlify-link','high','Netlify and GitHub do not agree on the source repository',['Check which GitHub repository the Netlify site builds from.'],'netlify');
+add(findings,c['map.github-netlify-deploy'],'github-netlify-deploy-drift','high','The deployed Netlify version is behind GitHub',['Inspect the latest deploy and redeploy the intended commit.'],'netlify',{supported:false,approvalRequired:true,label:'Redeploy intended commit'});
+if(c['map.app-supabase']?.status==='FAIL')findings.push(finding('supabase-project-mismatch','critical','The app points at a different Supabase project',c['map.app-supabase'].detail,['map.app-supabase'],['Compare the production Supabase project reference with the intended project.'],'supabase',{supported:false,approvalRequired:true,label:'Correct project reference'}));else add(findings,c['map.app-supabase'],'supabase-link-unproven','medium','The app-to-Supabase relationship is not fully proven',['Confirm which Supabase project production should use.'],'supabase');
+if(c['map.app-railway']?.status==='FAIL')findings.push(finding('railway-endpoint-mismatch','critical','The deployed app points at a Railway service outside the connected project evidence',c['map.app-railway'].detail,['map.app-railway'],['Open Railway and verify the production service/domain intended for this app.'],'railway',{supported:false,approvalRequired:true,label:'Correct backend endpoint'}));else add(findings,c['map.app-railway'],'railway-link-unproven','medium','The app-to-Railway relationship is not fully proven',['Confirm the production backend endpoint and Railway project.'],'railway');
+add(findings,c['map.app-stripe'],'stripe-link-unproven','medium','The app-to-Stripe relationship is not fully proven',['Confirm the production Stripe account and webhook configuration.'],'stripe');
+if(c['map.railway-supabase']?.status==='FAIL')findings.push(finding('railway-supabase-mismatch','critical','Railway is configured for a different Supabase project',c['map.railway-supabase'].detail,['map.railway-supabase'],['WeaveRelay can repair only the public SUPABASE_URL reference when the deployed app proves one Railway service and one Supabase project. You must approve the write immediately before it happens.'],'railway',{supported:true,approvalRequired:true,type:'railway-supabase-url',provider:'railway',label:'FIX SUPABASE CONNECTION'}));else add(findings,c['map.railway-supabase'],'railway-supabase-unproven','medium','Railway → Supabase is not fully proven',['Open Railway or Supabase to confirm the production project relationship.'],'railway');
+if(c['repair.railway-runtime']?.status==='WARN'&&c['repair.railway-runtime']?.evidence?.redeployRequired===true)findings.push(finding('railway-redeploy-required','high','Railway needs a redeploy to apply the repaired configuration',c['repair.railway-runtime'].detail,['repair.railway-runtime'],['Approve one redeploy of the already-proven Railway service. WeaveRelay will then verify deployment status and the live backend domain.'],'railway',{supported:true,approvalRequired:true,type:'railway-redeploy',provider:'railway',label:'REDEPLOY & VERIFY'}));
+else if(c['repair.railway-runtime']?.status==='WARN')findings.push(finding('railway-runtime-verification-pending','medium','Railway runtime verification is still in progress',c['repair.railway-runtime'].detail,['repair.railway-runtime'],['Run diagnosis again after the Railway deployment finishes.'],'railway'));
+else if(c['repair.railway-runtime']?.status==='FAIL')findings.push(finding('railway-runtime-verification-failed','high','The repaired Railway backend did not verify',c['repair.railway-runtime'].detail,['repair.railway-runtime'],['Open Railway to inspect the failed deployment before making another configuration change.'],'railway'));
+if(c['repair.railway-supabase-dependency']?.status==='WARN')findings.push(finding('railway-supabase-runtime-unproven','medium','The backend is running, but live Supabase communication is not yet proven',c['repair.railway-supabase-dependency'].detail,['repair.railway-supabase-dependency'],['WeaveRelay will only call this fixed when a safe application diagnostic proves a real Supabase read after redeploy.'],'railway'));
+else if(c['repair.railway-supabase-dependency']?.status==='FAIL')findings.push(finding('railway-supabase-runtime-failed','critical','The repaired backend still cannot use Supabase',c['repair.railway-supabase-dependency'].detail,['repair.railway-supabase-dependency'],['Open Railway first; the service is running, but its own diagnostic reports the Supabase dependency is failing.'],'railway'));
+add(findings,c['map.railway-stripe-webhook'],'railway-stripe-webhook-unproven','medium','Stripe → Railway webhook routing is not fully proven',['Check whether Stripe should call this Railway backend or another handler.'],'stripe',{supported:false,approvalRequired:true,label:'Repair webhook route'});
+if(c['repair.stripe-webhook-delivery']?.status==='WARN')findings.push(finding('stripe-webhook-delivery-pending','medium','Stripe webhook delivery is not yet proven',c['repair.stripe-webhook-delivery'].detail,['repair.stripe-webhook-delivery'],['Run diagnosis again after a real Stripe event matching this endpoint occurs. WeaveRelay will not create a payment or other financial event just to force a PASS.'],'stripe'));
+else if(c['repair.stripe-webhook-delivery']?.status==='FAIL')findings.push(finding('stripe-webhook-handler-failing','critical','The Stripe webhook URL is correct, but delivery is still failing',c['repair.stripe-webhook-delivery'].detail,['repair.stripe-webhook-delivery'],['Open Stripe event deliveries and Railway logs. The destination is correct, so investigate the webhook handler response/signature processing rather than changing the URL again.'],'stripe'));
+add(findings,c['runtime.railway-env-coverage'],'railway-runtime-config','high','Railway runtime configuration needs attention',['Review the missing runtime configuration names before changing another provider.'],'railway',{supported:false,approvalRequired:true,label:'Repair Railway configuration'});
+add(findings,c['payments.stripe-webhooks'],'stripe-webhook-boundary','high','Stripe webhook boundary needs attention',['Review Stripe webhook access/configuration for this production app.'],'stripe',{supported:false,approvalRequired:true,label:'Repair Stripe webhook'});
+add(findings,c['map.cross-system'],'cross-system-map-incomplete','medium','The cross-system map could not be completed',['Run diagnosis again and verify each connected provider is still readable.']);
+for(const check of active){if(check.status==='WARN'&&!findings.some(f=>f.evidence.includes(check.id)))findings.push(finding(`warn-${check.id}`,'medium',`${check.label} needs attention`,check.detail,[check.id],['Verify this connection in WeaveRelay.']));if(check.status==='FAIL'&&!findings.some(f=>f.evidence.includes(check.id)))findings.push(finding(`fail-${check.id}`,'high',`${check.label} failed`,check.detail,[check.id],['Inspect this failure boundary before changing another system.']))}
+const severityRank={critical:4,high:3,medium:2,low:1};findings.sort((a,b)=>(severityRank[b.severity]||0)-(severityRank[a.severity]||0));const worst=active.reduce((m,x)=>rank[x.status]>rank[m]?x.status:m,'PASS');const passed=active.filter(x=>x.status==='PASS').length;const headline=findings[0]?.title||(worst==='PASS'?'No cross-system failure found in the current read-only snapshot':'More connection evidence is needed');return{mode:'read-only',status:worst==='FAIL'?'broken':findings.length?'attention':'healthy',headline,summary:`${passed} of ${active.length} active checks passed. ${findings.length} diagnostic finding${findings.length===1?'':'s'}.`,findings,safeRepairs:findings.map(f=>({finding:f.id,label:f.repair?.label||'Review issue',supported:Boolean(f.repair?.supported),approvalRequired:f.repair?.approvalRequired!==false,type:f.repair?.type||null,provider:f.repair?.provider||f.provider||null,openProvider:f.openProvider})).slice(0,20),destructiveChangesAllowed:false,diagnosedAt:new Date().toISOString()}}

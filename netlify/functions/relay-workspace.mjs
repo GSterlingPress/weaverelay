@@ -1,5 +1,5 @@
 import { readTicket } from './_relay-crypto.mjs';
-import { readWorkspace } from './_relay-store.mjs';
+import { readWorkspace } from './_workspace-store.mjs';
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
 export default async (request) => {
   if (request.method !== 'POST') return json(405, { error: 'Method not allowed.' });
