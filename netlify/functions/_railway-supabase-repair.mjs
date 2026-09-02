@@ -61,12 +61,12 @@ export async function inspectRailwaySupabaseRepair({workspace,railwayToken,supab
   const desiredUrl=`https://${desiredHost}`;
   const currentHost=hostOf(target.currentSupabaseUrl);
   const alreadyCorrect=currentHost===desiredHost;
-  return{eligible:!alreadyCorrect,alreadyCorrect,reason:alreadyCorrect?'already-correct':'safe-public-reference-mismatch',desiredRef,target:{projectId:target.projectId,projectName:target.projectName,environmentId:target.environmentId,environmentName:target.environmentName,serviceId:target.serviceId,serviceName:target.serviceName},internal:{desiredUrl,currentSupabaseUrl:target.currentSupabaseUrl}};
+  return{eligible:!alreadyCorrect,alreadyCorrect,reason:alreadyCorrect?'already-correct':'safe-public-reference-mismatch',desiredRef,target:{projectId:target.projectId,projectName:target.projectName,environmentId:target.environmentId,environmentName:target.environmentName,serviceId:target.serviceId,serviceName:target.serviceName,publicDomain:target.publicDomain},internal:{desiredUrl,currentSupabaseUrl:target.currentSupabaseUrl}};
 }
 
 export async function applyRailwaySupabaseRepair({workspace,railwayToken,supabaseToken,fetchImpl=fetch}={}){
   const proposal=await inspectRailwaySupabaseRepair({workspace,railwayToken,supabaseToken,fetchImpl});
-  if(proposal.alreadyCorrect)return{changed:false,verified:true,desiredRef:proposal.desiredRef,target:proposal.target,runtimeVerified:false};
+  if(proposal.alreadyCorrect)return{changed:false,verified:true,desiredRef:proposal.desiredRef,target:proposal.target,runtimeVerified:false,redeployRequired:false};
   if(!proposal.eligible)throw new Error(`WeaveRelay cannot safely apply this repair: ${proposal.reason}.`);
   const input={projectId:proposal.target.projectId,environmentId:proposal.target.environmentId,serviceId:proposal.target.serviceId,variables:{SUPABASE_URL:proposal.internal.desiredUrl}};
   const write=await graphql(railwayToken,'mutation variableCollectionUpsert($input: VariableCollectionUpsertInput!) { variableCollectionUpsert(input: $input) }',{input},fetchImpl);
@@ -74,5 +74,5 @@ export async function applyRailwaySupabaseRepair({workspace,railwayToken,supabas
   const verify=await graphql(railwayToken,'query variables($projectId: String!, $environmentId: String!, $serviceId: String) { variables(projectId: $projectId, environmentId: $environmentId, serviceId: $serviceId) }',{projectId:proposal.target.projectId,environmentId:proposal.target.environmentId,serviceId:proposal.target.serviceId},fetchImpl);
   const verified=Boolean(verify.ok&&hostOf(verify.data?.variables?.SUPABASE_URL)===`${proposal.desiredRef}.supabase.co`);
   if(!verified)throw new Error('Railway accepted the change, but WeaveRelay could not verify the new Supabase reference.');
-  return{changed:true,verified:true,desiredRef:proposal.desiredRef,target:proposal.target,runtimeVerified:false};
+  return{changed:true,verified:true,desiredRef:proposal.desiredRef,target:proposal.target,runtimeVerified:false,redeployRequired:true};
 }
