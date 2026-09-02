@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceMonitorState,buildOutageEmail,buildRecoveryEmail,normalizeMonitoring } from '../netlify/functions/_monitoring.mjs';
+import { advanceMonitorState,buildOutageEmail,buildRecoveryEmail,normalizeMonitoring,isMonitorDue } from '../netlify/functions/_monitoring.mjs';
 
 test('monitoring defaults are conservative',()=>{
   const value=normalizeMonitoring({});
@@ -9,9 +9,16 @@ test('monitoring defaults are conservative',()=>{
   assert.equal(value.autoRepairMode,'off');
 });
 
+test('monitor interval is honored instead of checking every scheduler tick',()=>{
+  const last='2026-09-02T19:00:00.000Z';
+  assert.equal(isMonitorDue({lastCheckedAt:last},{enabled:true,intervalMinutes:15},Date.parse('2026-09-02T19:05:00.000Z')),false);
+  assert.equal(isMonitorDue({lastCheckedAt:last},{enabled:true,intervalMinutes:15},Date.parse('2026-09-02T19:15:00.000Z')),true);
+  assert.equal(isMonitorDue({},{enabled:false,intervalMinutes:5},Date.parse('2026-09-02T19:15:00.000Z')),false);
+});
+
 test('one failed check does not page the customer by default',()=>{
   const next=advanceMonitorState({}, {status:'broken',detail:'timeout',checkedAt:'2026-09-02T19:00:00.000Z'}, {enabled:true,emailAlerts:true}, '2026-09-02T19:00:00.000Z');
-  assert.equal(next.status,'broken'===next.status?'unexpected':'attention');
+  assert.equal(next.status,'attention');
   assert.equal(next.shouldAlertDown,false);
   assert.equal(next.consecutiveFailures,1);
 });
