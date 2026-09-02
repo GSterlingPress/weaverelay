@@ -17,6 +17,12 @@ async function runRepair(type,provider){
     try{const j=await api('/api/repair/railway-supabase',{method:'POST',body:JSON.stringify({workspaceId:current,approved:true})});alert(j.message||'Repair completed.');await api('/api/diagnose',{method:'POST',body:JSON.stringify({workspaceId:current})});await openWorkspace(current)}catch(err){alert(err.message)}
     return;
   }
+  if(type==='railway-redeploy'){
+    const approved=confirm('Railway has the corrected configuration, but the running service must be redeployed to load it. WeaveRelay will redeploy only the already-proven Railway service using its existing code, then verify the new deployment and live backend. Approve this redeploy?');
+    if(!approved)return;
+    try{const j=await api('/api/repair/railway-redeploy',{method:'POST',body:JSON.stringify({workspaceId:current,approved:true})});alert(j.message||'Railway redeploy started.');await api('/api/diagnose',{method:'POST',body:JSON.stringify({workspaceId:current})});await openWorkspace(current)}catch(err){alert(err.message)}
+    return;
+  }
   alert('This repair is not enabled until its write permission and post-fix verification test are proven safe.')
 }
 async function disconnectProvider(provider){if(!confirm(`Disconnect ${provider} from this WeaveRelay workspace? The stored encrypted credential will be deleted.`))return;try{await api('/api/provider/disconnect',{method:'POST',body:JSON.stringify({workspaceId:current,provider})});await openWorkspace(current)}catch(err){alert(err.message)}}
