@@ -72,6 +72,14 @@
   to = "/.netlify/functions/provider-window"
   status = 200
 [[redirects]]
+  from = "/api/provider/window/netlify"
+  to = "/.netlify/functions/provider-window-netlify"
+  status = 200
+[[redirects]]
+  from = "/api/provider/window/supabase"
+  to = "/.netlify/functions/provider-window-supabase"
+  status = 200
+[[redirects]]
   from = "/api/oauth/github/callback"
   to = "/.netlify/functions/oauth-github-callback"
   status = 200
