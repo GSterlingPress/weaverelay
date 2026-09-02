@@ -54,7 +54,7 @@ export function advanceMonitorState(previous={},observation,monitoringInput={},n
   const shouldAlertRecovery=monitoring.enabled&&monitoring.recoveryAlerts&&healthy&&wasIncident&&Boolean(previous.alertedAt);
   return{
     ...previous,
-    status:confirmedBroken?'broken':healthy?'healthy':observation?.status||'attention',
+    status:confirmedBroken?'broken':healthy?'healthy':broken?'attention':observation?.status||'attention',
     consecutiveFailures,
     incidentId,
     lastCheckedAt:observation?.checkedAt||now,
