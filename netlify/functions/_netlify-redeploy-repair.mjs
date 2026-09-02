@@ -52,5 +52,29 @@ export async function triggerNetlifyRedeploy({workspace,netlifyToken,githubToken
   if(!result.ok)throw new Error(`Netlify rejected the approved rebuild${result.status?` (HTTP ${result.status})`:''}.`);
   const buildId=clean(result.data?.id),deployId=clean(result.data?.deploy_id);
   if(!buildId&&!deployId)throw new Error('Netlify accepted the request but did not return a build or deploy identifier, so WeaveRelay cannot verify it safely.');
-  return{requested:true,siteName:target.siteName||null,branch:target.branch,repository:target.repository,buildId:buildId||null,deployId:deployId||null,requestedAt:new Date().toISOString(),verificationPending:true,sourceChanged:false,environmentChanged:false};
+  return{requested:true,siteId:target.siteId,siteName:target.siteName||null,branch:target.branch,repository:target.repository,buildId:buildId||null,deployId:deployId||null,beforeDeployId:target.latestDeployId||null,requestedAt:new Date().toISOString(),verificationPending:true,sourceChanged:false,environmentChanged:false};
+}
+
+export async function verifyNetlifyRedeploy({workspace,repair,netlifyToken,githubToken,fetchImpl=fetch}={}){
+  if(!repair?.siteId||!repair?.branch||!repair?.repository||!netlifyToken||!githubToken)return{status:'WARN',detail:'The Netlify rebuild was requested, but verification metadata is incomplete.',evidence:{verificationPending:true}};
+  const [deploys,head]=await Promise.all([
+    netlifyJson(netlifyToken,`/sites/${encodeURIComponent(repair.siteId)}/deploys?per_page=3`,{fetchImpl}),
+    githubJson(githubToken,`/repos/${repair.repository.split('/').map(encodeURIComponent).join('/')}/commits/${encodeURIComponent(repair.branch)}`,{fetchImpl})
+  ]);
+  if(!deploys.ok||!Array.isArray(deploys.data))return{status:'WARN',detail:'Netlify rebuild verification could not read the latest deploys.',evidence:{verificationPending:true,httpStatus:deploys.status||null}};
+  const candidates=deploys.data.filter(d=>clean(d.branch)===repair.branch);
+  const latest=candidates[0]||deploys.data[0];
+  if(!latest)return{status:'WARN',detail:'The rebuild was requested, but no resulting Netlify deploy is visible yet.',evidence:{verificationPending:true}};
+  const latestId=clean(latest.id),state=clean(latest.state).toLowerCase(),commit=clean(latest.commit_ref||latest.commit),headSha=head.ok?clean(head.data?.sha):'';
+  const isNew=Boolean(latestId&&latestId!==clean(repair.beforeDeployId));
+  const ready=['ready','uploaded'].includes(state);
+  const sourceMatch=Boolean(commit&&headSha&&(commit.startsWith(headSha)||headSha.startsWith(commit)));
+  let publicHealthy=false,httpStatus=null;
+  if(ready&&workspace?.siteOrigin){try{const r=await fetchImpl(workspace.siteOrigin,{method:'GET',redirect:'follow',headers:{'user-agent':UA,'cache-control':'no-cache'},signal:timeout(8000)});httpStatus=r.status;publicHealthy=r.status>=200&&r.status<400;await r.body?.cancel?.().catch?.(()=>{})}catch{}}
+  if(!isNew)return{status:'WARN',detail:'Netlify has not exposed a new production deploy for the approved rebuild yet.',evidence:{verificationPending:true,newDeployObserved:false,state:state||null}};
+  if(['error','failed'].includes(state))return{status:'FAIL',detail:'The approved Netlify rebuild produced a failed deploy.',evidence:{verificationPending:false,newDeployObserved:true,state,sourceMatch,publicHealthy:false}};
+  if(!ready)return{status:'WARN',detail:`A new Netlify deploy is visible and is currently ${state||'processing'}.`,evidence:{verificationPending:true,newDeployObserved:true,state,sourceMatch}};
+  if(!sourceMatch)return{status:'FAIL',detail:'The new Netlify deploy completed, but it does not match the current proven GitHub branch head.',evidence:{verificationPending:false,newDeployObserved:true,state,sourceMatch:false,publicHealthy}};
+  if(!publicHealthy)return{status:'FAIL',detail:'The approved Netlify rebuild completed from the correct GitHub branch, but the public application is still not healthy.',evidence:{verificationPending:false,newDeployObserved:true,state,sourceMatch:true,publicHealthy:false,httpStatus}};
+  return{status:'PASS',detail:'The approved Netlify rebuild produced a new successful deploy from the current proven GitHub branch, and the public application is responding successfully.',evidence:{verificationPending:false,newDeployObserved:true,state,sourceMatch:true,publicHealthy:true,httpStatus}};
 }
