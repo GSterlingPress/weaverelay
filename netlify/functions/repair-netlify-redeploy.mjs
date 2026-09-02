@@ -15,9 +15,9 @@ export default async request=>{
     const netlifySecret=decryptSecret(await readSecret(netlifyConnection.id)),githubSecret=decryptSecret(await readSecret(githubConnection.id));
     const repair=await triggerNetlifyRedeploy({workspace,netlifyToken:netlifySecret?.accessToken,githubToken:githubSecret?.accessToken});
     const now=new Date().toISOString();
-    workspace.lastRepair={type:'netlify-redeploy',approved:true,requestedAt:now,siteName:repair.siteName,branch:repair.branch,repository:repair.repository,buildId:repair.buildId,deployId:repair.deployId,configurationChanged:false,sourceChanged:false,verificationPending:true};
+    workspace.lastRepair={type:'netlify-redeploy',approved:true,requestedAt:now,siteId:repair.siteId,siteName:repair.siteName,branch:repair.branch,repository:repair.repository,buildId:repair.buildId,deployId:repair.deployId,beforeDeployId:repair.beforeDeployId,configurationChanged:false,sourceChanged:false,verificationPending:true,verified:false};
     workspace.updatedAt=now;
     await writeWorkspace(workspace);
-    return json(200,{ok:true,message:'Netlify rebuild requested for the proven production site and branch. WeaveRelay will not call it fixed until a later diagnosis sees a successful published deploy and a healthy public app.',repair:{type:'netlify-redeploy',siteName:repair.siteName,branch:repair.branch,verificationPending:true}});
+    return json(200,{ok:true,message:'Netlify rebuild requested for the proven production site and branch. WeaveRelay will verify the new deploy, GitHub branch match, and public site before calling it fixed.',repair:{type:'netlify-redeploy',siteName:repair.siteName,branch:repair.branch,verificationPending:true}});
   }catch(error){return safeError(error)}
 };
