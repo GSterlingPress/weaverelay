@@ -1,0 +1,1 @@
+import{destroySession,clearSessionCookie}from'./_auth.mjs';import{json}from'./_http.mjs';export default async request=>{await destroySession(request);return json(200,{ok:true},{'set-cookie':clearSessionCookie()});};

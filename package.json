@@ -1,0 +1,15 @@
+{
+  "name": "weaverelay",
+  "version": "3.0.0-early-access",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "build": "node scripts/build-check.mjs"
+  },
+  "dependencies": {
+    "@netlify/blobs": "^10.0.0",
+    "resend": "^6.0.0"
+  },
+  "devDependencies": {}
+}

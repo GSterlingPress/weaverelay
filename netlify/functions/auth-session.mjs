@@ -1,0 +1,1 @@
+import { currentUser } from './_auth.mjs';import{json}from'./_http.mjs';export default async request=>{const user=await currentUser(request);return json(200,{ok:true,user:user?{id:user.id,email:user.email}:null});};

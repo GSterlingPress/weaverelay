@@ -1,10 +1,110 @@
 [build]
   publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+[[redirects]]
+  from = "/api/waitlist/request"
+  to = "/.netlify/functions/request-verification"
+  status = 200
+[[redirects]]
+  from = "/api/waitlist/verify"
+  to = "/.netlify/functions/verify-email"
+  status = 200
+
+# Passwordless WeaveRelay account
+[[redirects]]
+  from = "/api/auth/request"
+  to = "/.netlify/functions/auth-request"
+  status = 200
+[[redirects]]
+  from = "/api/auth/verify"
+  to = "/.netlify/functions/auth-verify"
+  status = 200
+[[redirects]]
+  from = "/api/auth/session"
+  to = "/.netlify/functions/auth-session"
+  status = 200
+[[redirects]]
+  from = "/api/auth/signout"
+  to = "/.netlify/functions/auth-signout"
+  status = 200
+
+# Customer workspaces
+[[redirects]]
+  from = "/api/workspaces"
+  to = "/.netlify/functions/workspace-list"
+  status = 200
+[[redirects]]
+  from = "/api/workspace"
+  to = "/.netlify/functions/workspace-get"
+  status = 200
+[[redirects]]
+  from = "/api/workspace/create"
+  to = "/.netlify/functions/workspace-create"
+  status = 200
+[[redirects]]
+  from = "/api/workspace/claim-client"
+  to = "/.netlify/functions/workspace-claim-client"
+  status = 200
+
+# Provider authorization + read-only probes
+[[redirects]]
+  from = "/api/provider/start"
+  to = "/.netlify/functions/provider-start"
+  status = 200
+[[redirects]]
+  from = "/api/provider/probe"
+  to = "/.netlify/functions/provider-probe"
+  status = 200
+[[redirects]]
+  from = "/api/provider/connect-key"
+  to = "/.netlify/functions/provider-connect-key"
+  status = 200
+[[redirects]]
+  from = "/api/provider/disconnect"
+  to = "/.netlify/functions/provider-disconnect"
+  status = 200
+[[redirects]]
+  from = "/api/oauth/github/callback"
+  to = "/.netlify/functions/oauth-github-callback"
+  status = 200
+[[redirects]]
+  from = "/api/diagnose"
+  to = "/.netlify/functions/diagnose-workspace"
+  status = 200
+
+# Studio One is Client #1. It seeds evidence; provider OAuth becomes source of truth.
+[[redirects]]
+  from = "/api/relay/handshake"
+  to = "/.netlify/functions/relay-handshake"
+  status = 200
+[[redirects]]
+  from = "/api/relay/workspace"
+  to = "/.netlify/functions/relay-workspace"
+  status = 200
+[[redirects]]
+  from = "/api/relay/provider/start"
+  to = "/.netlify/functions/relay-provider-start"
+  status = 200
 
 [[headers]]
   for = "/*"
   [headers.values]
-    X-Frame-Options = "DENY"
     X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
+    Referrer-Policy = "no-referrer"
+    X-Frame-Options = "DENY"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    Content-Security-Policy = "default-src 'self'; connect-src 'self' https://github.com https://api.github.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://github.com"
+
+[[redirects]]
+  from = "/app"
+  to = "/app.html"
+  status = 200
+
+[[redirects]]
+  from = "/app/"
+  to = "/app.html"
+  status = 200
