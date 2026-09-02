@@ -44,9 +44,10 @@ Current capabilities on the protected `cross-system-diagnosis-v1` branch include
 - provider reconnect repair paths;
 - guarded correction of Railway `SUPABASE_URL` when WeaveRelay can prove exactly one production Railway service and exactly one intended Supabase project from independent live evidence;
 - a second explicit approval gate for Railway redeploy when that configuration repair changed the running service's environment;
-- post-redeploy verification that Railway reports the new deployment successful and that the proven public backend domain answers a live request.
+- post-redeploy verification that Railway reports the new deployment successful and that the proven public backend domain answers a live request;
+- deeper post-fix verification through a safe application self-diagnostic when the backend exposes structured read-only dependency evidence.
 
-## First real FIX IT path
+## First full DIAGNOSE → FIX → REDEPLOY → VERIFY chain
 
 For a proven Railway → Supabase mismatch, WeaveRelay can offer **FIX SUPABASE CONNECTION**.
 
@@ -70,13 +71,21 @@ After approval, WeaveRelay redeploys only the previously proven Railway service/
 
 A queued/building/deploying deployment remains WARN. A failed or crashed deployment becomes FAIL. WeaveRelay never treats “redeploy request accepted” as proof that the backend is healthy.
 
-This repair chain uses Railway's documented Public API operations for `variableCollectionUpsert`, `serviceInstanceRedeploy`, and deployment listing. It must fail closed if the service/project relationship is ambiguous.
+### Final application-dependency verification
 
-## What runtime verification proves — and does not prove
+Backend reachability is still not enough to prove the repaired application can actually use Supabase. After the Railway runtime is verified, WeaveRelay can now look for a safe structured application self-diagnostic on the proven backend, using read-only GET requests such as `/api/connect/diagnostic`, `/api/health`, or `/health`.
 
-A successful post-redeploy verification proves that the corrected configuration was followed by a successful Railway deployment and that the proven backend service is reachable.
+If that structured diagnostic contains a Supabase check, WeaveRelay applies a stricter rule:
 
-It does **not yet** prove every application-specific Supabase query or business action succeeds. Deeper endpoint/function-level postconditions are the next layer and must be based on evidence rather than assumptions.
+- **PASS** only when the application reports Supabase PASS **and** provides non-secret evidence that a real read/query/result succeeded;
+- **FAIL** when the application's own diagnostic reports the Supabase dependency failing;
+- **WARN** when the backend is running but the application exposes no sufficiently strong structured Supabase proof.
+
+WeaveRelay does not retain the diagnostic response body, provider credentials, auth headers, URLs, domains, keys, tokens, cookies, or other secret-bearing evidence fields from this proof step.
+
+Studio One is the pilot shape for this contract without requiring any Studio One modification. Its existing public read-only `/api/connect/diagnostic` endpoint already returns a `supabase.live` check backed by a real Supabase Production Vault read and non-secret evidence that the Driftwood production record was found. WeaveRelay's automated tests use a Studio One-shaped response to prove that this contract can distinguish genuine backend → Supabase communication from mere backend uptime.
+
+This does **not** mean every customer app must expose the same endpoint or that every business function is automatically proven. Apps without a safe structured dependency check remain WARN at this deepest verification layer rather than receiving a false PASS.
 
 ## Safety invariants
 
@@ -88,6 +97,7 @@ It does **not yet** prove every application-specific Supabase query or business 
 - No silent destructive changes.
 - Configuration repair and production redeploy are separate approval gates.
 - Every write action requires a defined verification step.
+- A repaired chain is not called fully verified until its deepest available application dependency postcondition passes.
 - Financial, destructive, ownership, legal, broad-permission, or otherwise high-impact changes require explicit authenticated approval and may remain manual permanently.
 - Preserve Studio One's known-good baseline and keep its data separate from customer workspaces.
 
@@ -105,7 +115,7 @@ GitHub Actions runs:
 - `npm test`
 - `npm run build`
 
-Tests cover diagnostic behavior, environment/runtime evidence, provider boundaries, fix-or-open action contracts, secret redaction, failure-closed repair selection, approved Railway variable repair, Railway redeploy targeting, and live runtime postcondition verification.
+Tests cover diagnostic behavior, environment/runtime evidence, provider boundaries, fix-or-open action contracts, secret redaction, failure-closed repair selection, approved Railway variable repair, Railway redeploy targeting, live runtime postcondition verification, and Studio One-shaped backend → Supabase dependency proof.
 
 ## Production status
 
