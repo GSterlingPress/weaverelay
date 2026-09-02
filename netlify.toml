@@ -85,7 +85,7 @@
   status = 200
 [[redirects]]
   from = "/api/diagnose"
-  to = "/.netlify/functions/diagnose-workspace"
+  to = "/.netlify/functions/diagnose-workspace-expanded"
   status = 200
 
 # RunPod controls — exact reviewed Pods only; stopping requires explicit approval
