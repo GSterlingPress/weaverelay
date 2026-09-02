@@ -16,6 +16,23 @@ import{json,safeError}from'./_http.mjs';
 const upsert=(checks,live)=>{const ix=checks.findIndex(c=>c.id===live.id);if(ix>=0)checks[ix]=live;else checks.push(live)};
 const providerIds={github:'github.live',netlify:'netlify.account',railway:'railway.runtime',supabase:'supabase.live',stripe:'stripe.live'};
 const checkById=(checks,id)=>checks.find(c=>c.id===id);
+const HANDLER_ACTIONS={
+'signature-configuration-missing':['Add the missing Stripe webhook-signature configuration in Railway, using the signing secret for this exact Stripe endpoint. Do not change the webhook URL again.'],
+'route-missing':['Restore or correct the webhook route in the Railway application so the exact Stripe path exists and accepts POST requests.'],
+'redirect':['Change the Stripe webhook destination to the final non-redirecting HTTPS route; Stripe treats redirects as failed deliveries.'],
+'access-blocked':['Remove login, auth middleware, IP blocking, or gateway restrictions from the Stripe webhook route while keeping Stripe signature verification in the handler.'],
+'handler-or-runtime-error':['Inspect the Railway logs for this webhook route and repair the application error producing the 5xx response.'],
+'timeout-or-network':['Make the handler return a 2xx response quickly and move slow work behind the acknowledgement; also verify Railway runtime/network availability.'],
+'network-unreachable':['Restore public reachability of the Railway webhook route before changing any Stripe configuration.'],
+'post-route-present':['The POST route appears to exist. Inspect Stripe delivery details and Railway logs for signature verification or application-processing errors.'],
+'request-validation-or-signature':['The route is reachable and rejects an unsigned probe, but a bad signing secret is not proven. Check Stripe delivery response details and the Railway webhook-signature configuration before changing code.'],
+'handler-processing-unclassified':['Open the failed Stripe delivery attempt and correlate it with Railway logs. The URL is correct; identify the exact handler response before making another change.']};
+function sharpenStripeHandlerFinding(diagnosis,snapshot){
+  const check=checkById(snapshot.checks,'repair.stripe-handler-failure');if(!check)return;
+  const classification=check.evidence?.classification||check.evidence?.handlerFailureClass;const existing=diagnosis.findings?.find(f=>f.id==='stripe-webhook-handler-failing');
+  const titles={'signature-configuration-missing':'Stripe webhook signing configuration is missing','route-missing':'The Stripe webhook route is missing','redirect':'The Stripe webhook route redirects','access-blocked':'The Stripe webhook route is access-blocked','handler-or-runtime-error':'The Stripe webhook handler is returning a server error','timeout-or-network':'The Stripe webhook handler is timing out','network-unreachable':'The Stripe webhook handler is unreachable','post-route-present':'The Stripe POST route exists, but delivery still fails','request-validation-or-signature':'Stripe webhook request validation needs investigation','handler-processing-unclassified':'Stripe reaches the handler boundary, but processing still fails'};
+  if(existing){existing.title=titles[classification]||existing.title;existing.explanation=check.detail;existing.evidence=[...new Set([...(existing.evidence||[]),'repair.stripe-handler-failure'])];existing.actions=HANDLER_ACTIONS[classification]||existing.actions;existing.provider='stripe';existing.repair={supported:false,approvalRequired:true,label:'Guided handler repair'};}
+}
 
 export default async request=>{
   if(request.method!=='POST')return json(405,{error:'Method not allowed.'});
@@ -50,6 +67,7 @@ export default async request=>{
     }
 
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,topology,checks}),diagnosis=diagnoseSnapshot(snapshot),stripeBoundary=checkById(snapshot.checks,'map.railway-stripe-webhook');
+    sharpenStripeHandlerFinding(diagnosis,snapshot);
     if(stripeBoundary?.status==='WARN'&&secrets.railway&&secrets.stripe)try{const proposal=await inspectStripeWebhookRepair({workspace,railwayToken:secrets.railway,stripeToken:secrets.stripe});if(proposal.eligible){const f=diagnosis.findings?.find(x=>x.id==='railway-stripe-webhook-unproven');if(f){f.explanation='Stripe has one enabled webhook with a webhook-like route, and WeaveRelay proved one different Railway production host for this app. A host-only repair is available; the existing path and query string will be preserved.';f.actions=['Approve a host-only Stripe webhook destination correction. WeaveRelay will re-read the endpoint immediately before writing and verify the saved host afterward.'];f.repair={supported:true,approvalRequired:true,type:'stripe-webhook-host',provider:'stripe',label:'FIX STRIPE WEBHOOK'}}}}catch{}
     workspace.diagnosis=diagnosis;workspace.lastDiagnosticSnapshot=snapshot;workspace.updatedAt=now;workspace.status=diagnosis.status==='healthy'?'ready':'needs_action';await writeWorkspace(workspace);
     return json(200,{ok:true,workspaceId:workspace.id,diagnosis,checks:snapshot.checks,stackMap:topology});
