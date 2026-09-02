@@ -10,7 +10,7 @@ import { buildEnvironmentDeploymentEvidence } from './_environment-deployment.mj
 import { buildRuntimePaymentsEvidence } from './_runtime-payments.mjs';
 import { buildRunPodComfyUIEvidence } from './_runpod-comfyui-proof.mjs';
 import { buildRunPodAppRelationshipEvidence } from './_runpod-app-relationship.mjs';
-import { probePublicSite,advanceMonitorState,normalizeMonitoring,buildOutageEmail,buildRecoveryEmail } from './_monitoring.mjs';
+import { probePublicSite,advanceMonitorState,normalizeMonitoring,isMonitorDue,buildOutageEmail,buildRecoveryEmail } from './_monitoring.mjs';
 
 const control=()=>getStore({name:'weaverelay-control-plane',consistency:'strong'});
 const users=()=>getStore({name:'weaverelay-users',consistency:'strong'});
@@ -81,8 +81,9 @@ async function sendEmail(to,message){
 
 async function processWorkspace(workspace){
   const monitoring=normalizeMonitoring(workspace.monitoring);
-  const observation=await probePublicSite(workspace.siteOrigin);
   const previous=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'}).catch(()=>null)||{};
+  if(!isMonitorDue(previous,monitoring))return{workspaceId:workspace.id,status:previous.status||'unknown',skipped:'interval'};
+  const observation=await probePublicSite(workspace.siteOrigin);
   let diagnosis=null;
   if(observation.status!=='healthy')diagnosis=await deepDiagnosis(workspace,observation).catch(()=>null);
   let next=advanceMonitorState(previous,observation,monitoring);
@@ -92,7 +93,7 @@ async function processWorkspace(workspace){
     if(!sent)next={...next,alertedAt:null,shouldAlertDown:false,alertDeliveryFailedAt:new Date().toISOString()};
   }else if(next.shouldAlertRecovery){
     const sent=await sendEmail(email,buildRecoveryEmail({workspace,observation,checkedAt:next.lastCheckedAt}));
-    if(!sent)next={...next,shouldAlertRecovery:false,recoveryAlertDeliveryFailedAt:new Date().toISOString()};
+    if(!sent)next={...next,status:'broken',incidentId:previous.incidentId||next.incidentId,alertedAt:previous.alertedAt||null,recoveredAt:null,shouldAlertRecovery:false,recoveryAlertDeliveryFailedAt:new Date().toISOString()};
   }
   next={...next,workspaceId:workspace.id,lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticFindingCount:diagnosis?.findings?.length||0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
   delete next.shouldAlertDown;delete next.shouldAlertRecovery;
@@ -106,7 +107,7 @@ export default async()=>{
   for(const workspace of workspaces){
     try{results.push(await processWorkspace(workspace))}catch(error){console.error('WeaveRelay monitor workspace failed',workspace?.id,error?.message||error)}
   }
-  return new Response(JSON.stringify({ok:true,checked:results.length}),{status:200,headers:{'content-type':'application/json'}});
+  return new Response(JSON.stringify({ok:true,checked:results.filter(x=>!x.skipped).length,skipped:results.filter(x=>x.skipped).length}),{status:200,headers:{'content-type':'application/json'}});
 };
 
 export const config={schedule:'*/5 * * * *'};
