@@ -5,9 +5,11 @@ import{decryptSecret}from'./_vault.mjs';
 import{probeCredential,checkForProvider}from'./_provider-probes.mjs';
 import{diagnoseSnapshot,sanitizeSnapshot}from'./_diagnose.mjs';
 import{augmentDiagnosis}from'./_diagnosis-expansion.mjs';
+import{verifyNetlifyRedeploy}from'./_netlify-redeploy-repair.mjs';
 
 const EXPANDED=['vercel','render','cloudflare','neon','resend'];
 const upsert=(checks,live)=>{const i=checks.findIndex(x=>x.id===live.id);if(i>=0)checks[i]=live;else checks.push(live)};
+async function tokenFor(workspaceId,provider){const c=await readConnection(workspaceId,provider).catch(()=>null);if(!c?.id||c.status==='revoked')return null;try{return decryptSecret(await readSecret(c.id))?.accessToken||null}catch{return null}}
 
 export default async request=>{
   const copy=request.clone();
@@ -22,6 +24,15 @@ export default async request=>{
       }catch{
         upsert(checks,{id:`${provider}.live`,label:provider[0].toUpperCase()+provider.slice(1),status:'WARN',detail:`Live ${provider} probe could not complete.`,evidence:{source:'weaverelay-live-expanded',resourceBodiesRetained:false}});
       }
+    }
+    if(workspace.lastRepair?.type==='netlify-redeploy'&&workspace.lastRepair?.verificationPending===true){
+      const [netlifyToken,githubToken]=await Promise.all([tokenFor(workspace.id,'netlify'),tokenFor(workspace.id,'github')]);
+      try{
+        const verified=await verifyNetlifyRedeploy({workspace,repair:workspace.lastRepair,netlifyToken,githubToken});
+        upsert(checks,{id:'repair.netlify-redeploy',label:'Netlify rebuild verification',status:verified.status,detail:verified.detail,evidence:{source:'weaverelay-netlify-redeploy-verification',...(verified.evidence||{})}});
+        if(verified.status==='PASS')workspace.lastRepair={...workspace.lastRepair,verificationPending:false,verified:true,verifiedAt:now};
+        else if(verified.status==='FAIL')workspace.lastRepair={...workspace.lastRepair,verificationPending:false,verified:false,verificationFailedAt:now};
+      }catch{upsert(checks,{id:'repair.netlify-redeploy',label:'Netlify rebuild verification',status:'WARN',detail:'The approved rebuild is recorded, but WeaveRelay could not complete its post-deploy verification in this run.',evidence:{source:'weaverelay-netlify-redeploy-verification',verificationPending:true}})}
     }
     const seed=workspace.lastDiagnosticSnapshot||workspace.seedSnapshot||{product:workspace.name,topology:workspace.stackMap||{}};
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,checks});
