@@ -18,7 +18,7 @@ export default async request=>{
     for(const provider of EXPANDED){
       const connection=await readConnection(workspace.id,provider).catch(()=>null);if(!connection?.id||connection.status==='revoked')continue;
       try{
-        const secret=decryptSecret(await readSecret(connection.id)),probe=await probeCredential(provider,secret?.accessToken),live=checkForProvider(provider,probe);upsert(checks,live);connection.lastCheckedAt=now;connection.status=live.status==='PASS'?'connected':'error';connection.updatedAt=now;connection.lastErrorCode=live.status==='PASS'?null:'probe_failed';await writeConnection(workspace.id,provider,connection);workspace.providers=(workspace.providers||[]).map(p=>p.id===provider?{...p,status:connection.status,detail:live.detail,checkedAt:now}:p;
+        const secret=decryptSecret(await readSecret(connection.id)),probe=await probeCredential(provider,secret?.accessToken),live=checkForProvider(provider,probe);upsert(checks,live);connection.lastCheckedAt=now;connection.status=live.status==='PASS'?'connected':'error';connection.updatedAt=now;connection.lastErrorCode=live.status==='PASS'?null:'probe_failed';await writeConnection(workspace.id,provider,connection);workspace.providers=(workspace.providers||[]).map(p=>p.id===provider?{...p,status:connection.status,detail:live.detail,checkedAt:now}:p);
       }catch{
         upsert(checks,{id:`${provider}.live`,label:provider[0].toUpperCase()+provider.slice(1),status:'WARN',detail:`Live ${provider} probe could not complete.`,evidence:{source:'weaverelay-live-expanded',resourceBodiesRetained:false}});
       }
