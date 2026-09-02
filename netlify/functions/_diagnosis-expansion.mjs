@@ -11,8 +11,12 @@ export function augmentDiagnosis(inputDiagnosis={},snapshot={}){
   const diagnosis={...inputDiagnosis,findings:[...(inputDiagnosis.findings||[])],safeRepairs:[...(inputDiagnosis.safeRepairs||[])]};
   const c=byId(snapshot.checks||[]);
 
+  const netlifyRepair=c['repair.netlify-redeploy'];
+  if(netlifyRepair?.status==='WARN')put(diagnosis.findings,finding('netlify-rebuild-verifying','medium','Netlify rebuild is still being verified',netlifyRepair.detail,netlifyRepair.id,['Run diagnosis again after Netlify finishes the deploy. WeaveRelay will require a new deploy, a GitHub branch-head match, and a healthy public app before calling the repair fixed.'],'netlify',{supported:false,approvalRequired:true,label:'VERIFYING'}));
+  else if(netlifyRepair?.status==='FAIL')put(diagnosis.findings,finding('netlify-rebuild-failed','critical','The approved Netlify rebuild did not recover production',netlifyRepair.detail,netlifyRepair.id,['Open the new Netlify deploy and inspect its build/runtime failure. Do not trigger another rebuild until the new failure boundary is understood.'],'netlify',{supported:false,approvalRequired:true,label:'INSPECT FAILED DEPLOY'}));
+
   const deployDrift=c['map.github-netlify-deploy'],deployState=c['env.netlify-deploy-state'];
-  if(deployState?.status==='FAIL'||deployDrift?.status==='WARN'||deployDrift?.status==='FAIL'){
+  if((deployState?.status==='FAIL'||deployDrift?.status==='WARN'||deployDrift?.status==='FAIL')&&netlifyRepair?.status!=='WARN'){
     const source=deployState?.status==='FAIL'?deployState:deployDrift;
     put(diagnosis.findings,finding('netlify-production-rebuild','high','Netlify production needs a clean rebuild',source?.detail||'The deployed Netlify state does not match the proven source/deploy evidence.',source?.id,['Approve a rebuild only after WeaveRelay re-proves exactly one production site, one GitHub source repository, and one production branch. The rebuild does not change source code or environment values.'],'netlify',{supported:true,approvalRequired:true,type:'netlify-redeploy',provider:'netlify',label:'REBUILD & VERIFY'}));
   }
