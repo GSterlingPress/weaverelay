@@ -84,6 +84,10 @@
   to = "/.netlify/functions/oauth-github-callback"
   status = 200
 [[redirects]]
+  from = "/api/oauth/railway/callback"
+  to = "/.netlify/functions/oauth-railway-callback"
+  status = 200
+[[redirects]]
   from = "/api/diagnose"
   to = "/.netlify/functions/diagnose-workspace-expanded"
   status = 200
