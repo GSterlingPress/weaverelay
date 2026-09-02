@@ -42,6 +42,7 @@ Examples include:
 - application/backend ↔ Supabase project
 - application/backend ↔ Stripe account and webhook boundary
 - domain/DNS/hosting state ↔ the deployed application
+- repaired runtime ↔ actual downstream dependency behavior after the change
 
 A PASS means evidence supports the relationship being tested, not merely that both providers are individually reachable.
 
@@ -110,6 +111,18 @@ A mature WeaveRelay experience should be:
 
 The founder should not need to connect customer systems, handle their credentials, or manually diagnose ordinary customer cases.
 
+## Verification ladder
+
+WeaveRelay must distinguish different levels of proof after a repair. A lower level must never be presented as a higher one.
+
+1. **Configuration verified:** the intended provider setting was written and read back successfully.
+2. **Deployment verified:** the intended deployment/restart completed successfully.
+3. **Runtime verified:** the proven service is actually reachable after deployment.
+4. **Dependency verified:** the running application proves it can exercise the repaired downstream dependency with a safe read-only operation.
+5. **Business-function verified:** only when an application exposes a specific safe postcondition for the business action being repaired.
+
+When the deepest safe proof is unavailable, WeaveRelay should return WARN rather than inventing PASS.
+
 ## Safety and privacy invariants
 
 - Customer credentials are never requested in chat.
@@ -121,6 +134,7 @@ The founder should not need to connect customer systems, handle their credential
 - Every write action must have a defined verification check.
 - Prefer reversible changes and provider-native rollback mechanisms.
 - Log the fact and type of an approved change without logging secret values.
+- Application self-diagnostic responses used for verification must be read-only and sanitized; do not retain secret-bearing fields or whole response bodies when only a boolean/count proof is needed.
 
 ## Development discipline
 
@@ -139,9 +153,13 @@ Stage 1 now includes read-only provider health, cross-system mapping, deployment
 
 A first **Stage 2 guided-repair pilot** exists for a narrowly proven Railway → Supabase mismatch. It may change only Railway `SUPABASE_URL`, and only when independent live evidence proves exactly one deployed Railway service and exactly one intended Supabase project. The customer must explicitly approve immediately before the configuration write. The mutation is read back and configuration-level verification is required. This repair fails closed when the relationship is ambiguous.
 
-If that configuration value actually changes, WeaveRelay now treats production refresh as a separate action rather than silently redeploying. Diagnosis offers **REDEPLOY & VERIFY** only for the already-proven Railway service/environment, with a second explicit approval gate. After the redeploy, WeaveRelay tracks Railway deployment state and does not mark runtime verification PASS unless the new deployment reports `SUCCESS` and the proven public Railway backend domain answers a live HTTP request. Pending deployment remains WARN; failed/crashed deployment becomes FAIL.
+If that configuration value actually changes, WeaveRelay treats production refresh as a separate action rather than silently redeploying. Diagnosis offers **REDEPLOY & VERIFY** only for the already-proven Railway service/environment, with a second explicit approval gate. After the redeploy, WeaveRelay tracks Railway deployment state and does not mark runtime verification PASS unless the new deployment reports `SUCCESS` and the proven public Railway backend domain answers a live HTTP request. Pending deployment remains WARN; failed/crashed deployment becomes FAIL.
 
-This proves deployment/runtime reachability after the approved configuration correction. It does not yet prove every application-specific Supabase query or business function succeeds; deeper functional postconditions remain the next layer.
+The next verification layer is now implemented: once the repaired Railway runtime is proven running, WeaveRelay may query a safe structured application self-diagnostic using a read-only GET. If that diagnostic exposes a Supabase check, dependency verification is PASS only when the application reports Supabase healthy and includes non-secret evidence that a real read/query/result succeeded. An application-reported Supabase failure becomes FAIL. If the application does not expose enough structured proof, the result remains WARN.
+
+Studio One is the pilot shape for this dependency-verification contract without modifying Studio One. Its existing public `/api/connect/diagnostic` response already contains a `supabase.live` check backed by a real read-only Production Vault query and non-secret evidence that the expected Driftwood production record was found. WeaveRelay tests use a Studio One-shaped response to prove the verifier behavior while preserving Studio One's five-PASS baseline and read-only safety boundary.
+
+This does not yet mean every application business function is verified. Business-function verification remains application-specific and must have its own safe, objective postcondition before WeaveRelay may claim it.
 
 These repair paths are not yet broad production promises and must not be marketed as generally available until production provider permissions and stranger end-to-end acceptance testing pass.
 
