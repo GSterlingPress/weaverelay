@@ -24,6 +24,14 @@ export function normalizeMonitoring(input={}){
   };
 }
 
+export function isMonitorDue(previous={},monitoringInput={},now=Date.now()){
+  const monitoring=normalizeMonitoring(monitoringInput);
+  if(!monitoring.enabled)return false;
+  const last=Date.parse(previous.lastCheckedAt||'');
+  if(!Number.isFinite(last))return true;
+  return now-last>=monitoring.intervalMinutes*60*1000-5000;
+}
+
 export async function probePublicSite(siteOrigin,{fetchImpl=fetch,timeoutMs=8000}={}){
   const origin=clean(siteOrigin);
   if(!origin)return{status:'skipped',detail:'No production URL is configured for this workspace.',httpStatus:null,checkedAt:new Date().toISOString()};
