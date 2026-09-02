@@ -1,7 +1,13 @@
-export const LIVE_PROVIDER_IDS=['github','netlify','railway','supabase','stripe'];
+export const LIVE_PROVIDER_IDS=['github','netlify','railway','supabase','stripe','runpod'];
 
 const clean=v=>String(v??'').trim();
 const result=(ok,detail,meta={})=>({ok,detail,meta});
+
+async function runpodList(token,path,fetchImpl=fetch){
+  const r=await fetchImpl(`https://rest.runpod.io/v1/${path}`,{headers:{authorization:`Bearer ${token}`,'user-agent':'weaverelay-runpod-readonly',accept:'application/json'}});
+  const d=await r.json().catch(()=>null);
+  return{ok:r.ok,status:r.status,data:d};
+}
 
 export async function probeCredential(provider,credential,{fetchImpl=fetch}={}){
   const token=clean(credential);
@@ -27,11 +33,17 @@ export async function probeCredential(provider,credential,{fetchImpl=fetch}={}){
     await r.text();
     return r.ok?result(true,'Stripe answered the restricted read-only Balance probe.',{accountName:'Stripe account'}):result(false,`Stripe returned HTTP ${r.status}.`,{httpStatus:r.status});
   }
+  if(provider==='runpod'){
+    const [pods,endpoints]=await Promise.all([runpodList(token,'pods',fetchImpl),runpodList(token,'endpoints',fetchImpl)]);
+    if(!pods.ok&&!endpoints.ok){const status=pods.status||endpoints.status;return result(false,`RunPod rejected the read-only resource probe${status?` (HTTP ${status})`:''}.`,{httpStatus:status||null});}
+    const podCount=Array.isArray(pods.data)?pods.data.length:null,endpointCount=Array.isArray(endpoints.data)?endpoints.data.length:null;
+    return result(true,'RunPod answered read-only Pod/Serverless inventory probes.',{accountName:'RunPod account',podCount,endpointCount,resourceBodiesRetained:false,environmentValuesRetained:false});
+  }
   throw new Error('This provider does not use a direct Early Access credential.');
 }
 
 export function checkForProvider(provider,probe){
-  const ids={netlify:'netlify.account',railway:'railway.runtime',supabase:'supabase.live',stripe:'stripe.live'};
-  const labels={netlify:'Netlify',railway:'Railway',supabase:'Supabase',stripe:'Stripe'};
-  return {id:ids[provider],label:labels[provider],status:probe.ok?'PASS':'FAIL',detail:probe.detail,evidence:{source:'weaverelay-live-encrypted-credential',...(probe.meta?.httpStatus?{httpStatus:probe.meta.httpStatus}:{})}};
+  const ids={netlify:'netlify.account',railway:'railway.runtime',supabase:'supabase.live',stripe:'stripe.live',runpod:'runpod.live'};
+  const labels={netlify:'Netlify',railway:'Railway',supabase:'Supabase',stripe:'Stripe',runpod:'RunPod'};
+  return {id:ids[provider],label:labels[provider],status:probe.ok?'PASS':'FAIL',detail:probe.detail,evidence:{source:'weaverelay-live-encrypted-credential',...(probe.meta?.httpStatus?{httpStatus:probe.meta.httpStatus}:{}),...(provider==='runpod'?{podCount:probe.meta?.podCount??null,endpointCount:probe.meta?.endpointCount??null,resourceBodiesRetained:false,environmentValuesRetained:false}:{})}};
 }
