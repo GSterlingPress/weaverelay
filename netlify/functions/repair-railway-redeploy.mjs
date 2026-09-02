@@ -15,16 +15,15 @@ async function railwayToken(workspaceId){
 export default async request=>{
   if(request.method!=='POST')return json(405,{error:'Method not allowed.'});
   try{
-    const user=await requireUser(request);
-    const body=await request.json();
+    const user=await requireUser(request),body=await request.json();
     if(body?.approved!==true)return json(400,{error:'Explicit approval is required immediately before this redeploy.'});
-    const workspace=await requireWorkspace(user.id,body.workspaceId);
-    const token=await railwayToken(workspace.id);
-    const result=await triggerRailwayRedeploy({workspace,railwayToken:token});
-    const now=new Date().toISOString();
-    workspace.lastRepair={...(workspace.lastRepair||{}),redeployRequired:false,redeployRequestedAt:now,previousDeploymentId:result.previousDeploymentId||null,redeploymentId:result.newDeploymentId||null,runtimeVerified:false,redeployApprovedBy:user.id};
-    workspace.updatedAt=now;
-    await writeWorkspace(workspace);
-    return json(200,{ok:true,repair:{type:'railway-redeploy',triggered:true,runtimeVerified:false,deploymentStatus:result.newDeploymentStatus||null},message:result.newDeploymentStatus?`Railway redeploy started with status ${result.newDeploymentStatus.toLowerCase()}. WeaveRelay will verify the running backend in diagnosis.`:'Railway accepted the redeploy. WeaveRelay will verify the running backend in diagnosis.'});
+    const workspace=await requireWorkspace(user.id,body.workspaceId),token=await railwayToken(workspace.id),result=await triggerRailwayRedeploy({workspace,railwayToken:token}),now=new Date().toISOString();
+    if(result.kind==='stripe-handler-secret'){
+      workspace.lastRepair={...(workspace.lastRepair||{}),runtimeVerified:false,deliveryVerified:false,fullChainVerified:false,handlerRepair:{...(workspace.lastRepair?.handlerRepair||{}),redeployRequired:false,redeployRequestedAt:now,previousDeploymentId:result.previousDeploymentId||null,redeploymentId:result.newDeploymentId||null,runtimeVerified:false,redeployApprovedBy:user.id}};
+    }else{
+      workspace.lastRepair={...(workspace.lastRepair||{}),redeployRequired:false,redeployRequestedAt:now,previousDeploymentId:result.previousDeploymentId||null,redeploymentId:result.newDeploymentId||null,runtimeVerified:false,redeployApprovedBy:user.id};
+    }
+    workspace.updatedAt=now;await writeWorkspace(workspace);
+    return json(200,{ok:true,repair:{type:'railway-redeploy',repairKind:result.kind,triggered:true,runtimeVerified:false,deploymentStatus:result.newDeploymentStatus||null},message:result.newDeploymentStatus?`Railway redeploy started with status ${result.newDeploymentStatus.toLowerCase()}. WeaveRelay will verify the running backend in diagnosis.`:'Railway accepted the redeploy. WeaveRelay will verify the running backend in diagnosis.'});
   }catch(error){return safeError(error)}
 };
