@@ -43,6 +43,7 @@ Examples include:
 - application/backend ↔ Stripe account and webhook boundary
 - domain/DNS/hosting state ↔ the deployed application
 - repaired runtime ↔ actual downstream dependency behavior after the change
+- repaired Stripe destination ↔ actual post-repair event delivery state
 
 A PASS means evidence supports the relationship being tested, not merely that both providers are individually reachable.
 
@@ -119,7 +120,8 @@ WeaveRelay must distinguish different levels of proof after a repair. A lower le
 2. **Deployment verified:** the intended deployment/restart completed successfully.
 3. **Runtime verified:** the proven service is actually reachable after deployment.
 4. **Dependency verified:** the running application proves it can exercise the repaired downstream dependency with a safe read-only operation.
-5. **Business-function verified:** only when an application exposes a specific safe postcondition for the business action being repaired.
+5. **Delivery verified:** for event-driven boundaries, the provider reports real post-repair delivery completion to the uniquely attributable endpoint.
+6. **Business-function verified:** only when an application exposes a specific safe postcondition for the business action being repaired.
 
 When the deepest safe proof is unavailable, WeaveRelay should return WARN rather than inventing PASS.
 
@@ -135,6 +137,7 @@ When the deepest safe proof is unavailable, WeaveRelay should return WARN rather
 - Prefer reversible changes and provider-native rollback mechanisms.
 - Log the fact and type of an approved change without logging secret values.
 - Application self-diagnostic responses used for verification must be read-only and sanitized; do not retain secret-bearing fields or whole response bodies when only a boolean/count proof is needed.
+- Do not create financially meaningful activity merely to manufacture a verification event.
 
 ## Development discipline
 
@@ -159,7 +162,11 @@ The next verification layer is implemented: once the repaired Railway runtime is
 
 Studio One is the pilot shape for this dependency-verification contract without modifying Studio One. Its existing public `/api/connect/diagnostic` response already contains a `supabase.live` check backed by a real read-only Production Vault query and non-secret evidence that the expected Driftwood production record was found. WeaveRelay tests use a Studio One-shaped response to prove the verifier behavior while preserving Studio One's five-PASS baseline and read-only safety boundary.
 
-A second Stage 2 repair pilot now covers a narrowly proven **Stripe webhook host mismatch**. WeaveRelay may offer `FIX STRIPE WEBHOOK` only when the deployed app proves exactly one Railway host owned by the connected Railway account, Stripe has exactly one enabled webhook endpoint, that endpoint has a webhook-like route, and its host differs from the proven Railway host. The customer must approve immediately before the write. WeaveRelay re-reads the endpoint before mutation, changes only the host while preserving path/query and event subscriptions, never reads or rotates the webhook signing secret, and re-reads Stripe to verify the saved destination. If webhook endpoint write permission is absent, the repair stops rather than escalating permission silently. A later diagnosis must independently observe Stripe → Railway host agreement before the chain is marked verified.
+A second Stage 2 repair pilot covers a narrowly proven **Stripe webhook host mismatch**. WeaveRelay may offer `FIX STRIPE WEBHOOK` only when the deployed app proves exactly one Railway host owned by the connected Railway account, Stripe has exactly one enabled webhook endpoint, that endpoint has a webhook-like route, and its host differs from the proven Railway host. The customer must approve immediately before the write. WeaveRelay re-reads the endpoint before mutation, changes only the host while preserving path/query and event subscriptions, never reads or rotates the webhook signing secret, and re-reads Stripe to verify the saved destination. If webhook endpoint write permission is absent, the repair stops rather than escalating permission silently.
+
+The Stripe chain now has a deeper delivery-verification layer. A correct endpoint URL is only configuration proof. WeaveRelay re-reads the repaired endpoint and requires it to remain the sole enabled webhook endpoint before using account-level Stripe event delivery state for endpoint attribution. It then inspects only post-repair events whose types match that endpoint's configured subscriptions. PASS requires at least one matching event with `pending_webhooks = 0`. A matching event still pending during a short grace period remains WARN; one still pending beyond the grace period becomes FAIL and isolates the remaining fault to Stripe delivery or the Railway handler rather than the destination URL. If no matching event has naturally occurred yet, WeaveRelay returns WARN and does not manufacture a payment, refund, subscription, checkout, or other financially meaningful event merely to turn the check green.
+
+Only counts, booleans, timestamps and non-secret repair metadata are retained from this delivery proof. Event payload bodies, endpoint URLs, signing secrets and Stripe credentials are not persisted in diagnostic evidence.
 
 This does not yet mean every application business function is verified. Business-function verification remains application-specific and must have its own safe, objective postcondition before WeaveRelay may claim it.
 
