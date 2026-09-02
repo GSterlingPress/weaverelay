@@ -46,7 +46,8 @@ Current capabilities on the protected `cross-system-diagnosis-v1` branch include
 - a second explicit approval gate for Railway redeploy when that configuration repair changed the running service's environment;
 - post-redeploy verification that Railway reports the new deployment successful and that the proven public backend domain answers a live request;
 - deeper post-fix verification through a safe application self-diagnostic when the backend exposes structured read-only dependency evidence;
-- guarded Stripe webhook host repair when one enabled webhook and one proven Railway production host make the mismatch unambiguous.
+- guarded Stripe webhook host repair when one enabled webhook and one proven Railway production host make the mismatch unambiguous;
+- post-repair Stripe delivery verification using naturally occurring Stripe events rather than manufacturing payment traffic.
 
 ## First full DIAGNOSE → FIX → REDEPLOY → VERIFY chain
 
@@ -74,7 +75,7 @@ A queued/building/deploying deployment remains WARN. A failed or crashed deploym
 
 ### Final application-dependency verification
 
-Backend reachability is still not enough to prove the repaired application can actually use Supabase. After the Railway runtime is verified, WeaveRelay can now look for a safe structured application self-diagnostic on the proven backend, using read-only GET requests such as `/api/connect/diagnostic`, `/api/health`, or `/health`.
+Backend reachability is still not enough to prove the repaired application can actually use Supabase. After the Railway runtime is verified, WeaveRelay can look for a safe structured application self-diagnostic on the proven backend, using read-only GET requests such as `/api/connect/diagnostic`, `/api/health`, or `/health`.
 
 If that structured diagnostic contains a Supabase check, WeaveRelay applies a stricter rule:
 
@@ -88,9 +89,9 @@ Studio One is the pilot shape for this contract without requiring any Studio One
 
 This does **not** mean every customer app must expose the same endpoint or that every business function is automatically proven. Apps without a safe structured dependency check remain WARN at this deepest verification layer rather than receiving a false PASS.
 
-## Stripe webhook repair chain
+## Stripe webhook repair and delivery chain
 
-WeaveRelay can now offer **FIX STRIPE WEBHOOK** only when the read-only evidence is unusually narrow and unambiguous:
+WeaveRelay can offer **FIX STRIPE WEBHOOK** only when the read-only evidence is unusually narrow and unambiguous:
 
 1. The deployed app exposes exactly one Railway hostname.
 2. That hostname matches a public domain in the connected Railway account.
@@ -101,9 +102,19 @@ WeaveRelay can now offer **FIX STRIPE WEBHOOK** only when the read-only evidence
 
 The repair changes **only the webhook host**. It preserves the existing webhook path and query string, does not alter event subscriptions, does not request or rotate the webhook signing secret, and does not retain the complete endpoint URL in public diagnosis or repair results.
 
-Immediately before writing, WeaveRelay re-reads the Stripe endpoint and aborts if it changed since diagnosis. It then uses Stripe's documented webhook endpoint update API to save the host-only correction and re-reads the endpoint to verify the saved host and preserved path/query. If the customer's restricted Stripe key can read webhook metadata but cannot perform the approved update, WeaveRelay stops and asks for narrowly scoped webhook endpoint write permission rather than silently broadening access.
+Immediately before writing, WeaveRelay re-reads the Stripe endpoint and aborts if it changed since diagnosis. It then saves the host-only correction and re-reads the endpoint to verify the saved host and preserved path/query. If the customer's restricted Stripe key can read webhook metadata but cannot perform the approved update, WeaveRelay stops and asks for narrowly scoped webhook endpoint write permission rather than silently broadening access.
 
-A saved Stripe change is not considered the full chain verified until a subsequent diagnosis independently sees the Stripe webhook host matching the Railway service already proven to belong to the app.
+A correct saved URL is **not** treated as proof that the Railway handler works. After repair, WeaveRelay now uses Stripe's own event state to seek real delivery evidence without creating a charge, checkout session, subscription, refund, or synthetic financial event solely for testing.
+
+Delivery verification is deliberately strict:
+
+- **PASS** only when this repaired endpoint remains the sole enabled webhook destination, a post-repair Stripe event matches its configured event subscriptions, and Stripe reports `pending_webhooks = 0` for that event;
+- **WARN** when no matching event has happened yet, when a matching event is still inside a short delivery grace period, or when multiple enabled endpoints make endpoint-specific attribution ambiguous;
+- **FAIL** when the URL still points to the correct Railway host but a matching post-repair event remains pending beyond the grace period. That isolates the remaining problem to Stripe delivery or the Railway webhook handler rather than the destination URL.
+
+WeaveRelay retains only counts/booleans and non-secret repair metadata for this proof. It does not persist event payload bodies, webhook endpoint URLs, signing secrets, Stripe credentials, or application object data.
+
+Stripe documents `pending_webhooks` as the number of webhook deliveries for an event that have not yet completed successfully. Because WeaveRelay requires this repaired endpoint to remain the only enabled endpoint before attributing that event-level state, a zero value becomes useful evidence for this specific callback boundary. If that uniqueness assumption stops being true, WeaveRelay falls back to WARN instead of overstating certainty.
 
 ## Safety invariants
 
@@ -115,7 +126,8 @@ A saved Stripe change is not considered the full chain verified until a subseque
 - No silent destructive changes.
 - Configuration repair and production redeploy are separate approval gates.
 - Every write action requires a defined verification step.
-- A repaired chain is not called fully verified until its deepest available application dependency postcondition passes.
+- A repaired chain is not called fully verified until its deepest available application dependency or delivery postcondition passes.
+- Do not create financially meaningful activity merely to manufacture a green verification check.
 - Financial, destructive, ownership, legal, broad-permission, or otherwise high-impact changes require explicit authenticated approval and may remain manual permanently.
 - Preserve Studio One's known-good baseline and keep its data separate from customer workspaces.
 
@@ -133,7 +145,7 @@ GitHub Actions runs:
 - `npm test`
 - `npm run build`
 
-Tests cover diagnostic behavior, environment/runtime evidence, provider boundaries, fix-or-open action contracts, secret redaction, failure-closed repair selection, approved Railway variable repair, Railway redeploy targeting, live runtime postcondition verification, Studio One-shaped backend → Supabase dependency proof, and guarded Stripe webhook host repair.
+Tests cover diagnostic behavior, environment/runtime evidence, provider boundaries, fix-or-open action contracts, secret redaction, failure-closed repair selection, approved Railway variable repair, Railway redeploy targeting, live runtime postcondition verification, Studio One-shaped backend → Supabase dependency proof, guarded Stripe webhook host repair, and Stripe post-repair delivery-state verification.
 
 ## Production status
 
