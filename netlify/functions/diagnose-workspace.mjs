@@ -29,9 +29,14 @@ const HANDLER_ACTIONS={
 'handler-processing-unclassified':['Open the failed Stripe delivery attempt and correlate it with Railway logs. The URL is correct; identify the exact handler response before making another change.']};
 function sharpenStripeHandlerFinding(diagnosis,snapshot){
   const check=checkById(snapshot.checks,'repair.stripe-handler-failure');if(!check)return;
-  const classification=check.evidence?.classification||check.evidence?.handlerFailureClass;const existing=diagnosis.findings?.find(f=>f.id==='stripe-webhook-handler-failing');
+  const classification=check.evidence?.classification||check.evidence?.handlerFailureClass,existing=diagnosis.findings?.find(f=>f.id==='stripe-webhook-handler-failing');
   const titles={'signature-configuration-missing':'Stripe webhook signing configuration is missing','route-missing':'The Stripe webhook route is missing','redirect':'The Stripe webhook route redirects','access-blocked':'The Stripe webhook route is access-blocked','handler-or-runtime-error':'The Stripe webhook handler is returning a server error','timeout-or-network':'The Stripe webhook handler is timing out','network-unreachable':'The Stripe webhook handler is unreachable','post-route-present':'The Stripe POST route exists, but delivery still fails','request-validation-or-signature':'Stripe webhook request validation needs investigation','handler-processing-unclassified':'Stripe reaches the handler boundary, but processing still fails'};
-  if(existing){existing.title=titles[classification]||existing.title;existing.explanation=check.detail;existing.evidence=[...new Set([...(existing.evidence||[]),'repair.stripe-handler-failure'])];existing.actions=HANDLER_ACTIONS[classification]||existing.actions;existing.provider='stripe';existing.repair={supported:false,approvalRequired:true,label:'Guided handler repair'};}
+  if(existing){
+    existing.title=titles[classification]||existing.title;existing.explanation=check.detail;existing.evidence=[...new Set([...(existing.evidence||[]),'repair.stripe-handler-failure'])];existing.actions=HANDLER_ACTIONS[classification]||existing.actions;
+    if(classification==='signature-configuration-missing'){
+      existing.provider='railway';existing.openProvider={label:'Open Railway',url:'https://railway.com/dashboard'};existing.repair={supported:true,approvalRequired:true,type:'stripe-handler-secret',provider:'railway',label:'ADD WEBHOOK SECRET'};
+    }else{existing.provider='stripe';existing.repair={supported:false,approvalRequired:true,label:'Guided handler repair'}}
+  }
 }
 
 export default async request=>{
