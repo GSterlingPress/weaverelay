@@ -14,13 +14,13 @@ Production: https://weaverelay.com
 
 Building an app has become dramatically easier. Connecting and troubleshooting everything behind it has not.
 
-A single app can depend on source control, hosting, backend infrastructure, databases, authentication, payments, environment variables, domains, webhooks, and provider-specific configuration. When something fails, the user often has to inspect several systems before even knowing where to start.
+A single app can depend on source control, hosting, backend infrastructure, databases, authentication, payments, environment variables, domains, webhooks, compute providers, and provider-specific configuration. When something fails, the user often has to inspect several systems before even knowing where to start.
 
 WeaveRelay is being built to reduce that back-and-forth.
 
 ## What WeaveRelay does today
 
-Early Access supports:
+Current Early Access live provider checks support:
 
 - **GitHub**
 - **Netlify**
@@ -36,6 +36,18 @@ The current product flow is:
 
 WeaveRelay includes passwordless customer accounts, app workspaces, encrypted server-side credential storage where credentials are required, provider connection/disconnection, and live read-only provider probes.
 
+## Why it is not a one-time setup tool
+
+WeaveRelay is designed to stay useful after the first successful connection.
+
+Apps keep changing. Deployments change, credentials expire, services go down, environment configuration drifts, APIs fail, and external compute can remain active longer than intended. The long-term value of WeaveRelay is a persistent view of the backend stack that can be checked again whenever something changes or breaks.
+
+The intended progression is:
+
+**CONNECT → MAP → DIAGNOSE → MONITOR → carefully authorized FIX actions**
+
+Continuous monitoring, alerts, history, cost guards, and safe provider-specific actions are roadmap capabilities; they are not all part of the current Early Access product yet.
+
 ## Real-world proof
 
 WeaveRelay's core diagnostic system was first proven against **Studio One**, our Client #1 test application.
@@ -45,6 +57,14 @@ That test produced five live PASS results across:
 **GitHub · Netlify · Railway · Supabase · Stripe**
 
 Studio One remains the first real test harness. The standalone WeaveRelay product and website are Client #2.
+
+## RunPod is the next important test
+
+Studio One also uses **RunPod**, which makes it a useful next provider for WeaveRelay because external GPU compute introduces another dashboard, another credential boundary, another runtime state, and potential ongoing spend.
+
+The codebase already recognizes RunPod as a provider, but **RunPod is not yet included in the standalone live-provider diagnostic set**. The next safe step is a read-only RunPod connection that can inspect connection/resource state without creating a Pod, starting compute, generating media, terminating resources, or triggering spend.
+
+A later RunPod safety capability may include an explicitly confirmed **STOP POD** action and cost/inactivity warnings. Any action that changes RunPod state must remain separately authorized and must never be triggered by a diagnostic automatically.
 
 ## Who it is for
 
@@ -66,7 +86,7 @@ WeaveRelay is deliberately conservative while the product expands:
 - Required stored credentials are encrypted server-side.
 - Diagnostic evidence is sanitized/redacted before presentation.
 - No automatic repair or destructive provider actions in the current Early Access product.
-- No provider spend, deployment, payment, or other irreversible action is triggered by diagnostics.
+- No provider spend, deployment, payment, compute start, or other irreversible action is triggered by diagnostics.
 
 ## What WeaveRelay does **not** claim yet
 
@@ -80,9 +100,9 @@ Automatic **FIX IT** actions are intentionally not part of the current public pr
 
 The long-term direction is straightforward:
 
-**CONNECT → MAP → DIAGNOSE → FIX**
+**CONNECT → MAP → DIAGNOSE → MONITOR → FIX**
 
-The goal is to make connecting and troubleshooting the services behind an app progressively less dependent on manually jumping among provider dashboards.
+The goal is to make connecting, troubleshooting, and safely operating the services behind an app progressively less dependent on manually jumping among provider dashboards.
 
 Every real Early Access connection problem is useful product evidence: recurring manual steps and failure boundaries become candidates for future WeaveRelay diagnostics and carefully controlled fixes.
 
@@ -99,6 +119,7 @@ Customer workspaces and provider connections are separate from Studio One produc
 - Preserve existing Resend DNS records when changing website/domain configuration.
 - Keep diagnostics read-only unless a future capability is deliberately designed, permissioned, and approved otherwise.
 - Do not weaken the known-good Studio One five-PASS implementation while developing the standalone product.
+- Treat RunPod start/stop/terminate and any other spend-affecting provider operation as a separate explicit action, never as part of an automatic diagnostic.
 
 ## Early Access
 
