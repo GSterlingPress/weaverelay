@@ -68,6 +68,10 @@
   to = "/.netlify/functions/provider-disconnect"
   status = 200
 [[redirects]]
+  from = "/api/provider/window"
+  to = "/.netlify/functions/provider-window"
+  status = 200
+[[redirects]]
   from = "/api/oauth/github/callback"
   to = "/.netlify/functions/oauth-github-callback"
   status = 200
