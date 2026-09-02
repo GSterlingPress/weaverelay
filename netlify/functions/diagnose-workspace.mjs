@@ -7,6 +7,7 @@ import{buildCrossSystemEvidence}from'./_cross-system.mjs';
 import{buildEnvironmentDeploymentEvidence}from'./_environment-deployment.mjs';
 import{buildRuntimePaymentsEvidence}from'./_runtime-payments.mjs';
 import{verifyRailwayRepairRuntime}from'./_railway-redeploy-repair.mjs';
+import{verifyBackendSupabaseDependency}from'./_backend-dependency-proof.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const upsert=(checks,live)=>{const ix=checks.findIndex(c=>c.id===live.id);if(ix>=0)checks[ix]=live;else checks.push(live)};
@@ -74,10 +75,20 @@ export default async request=>{
         const runtime=await verifyRailwayRepairRuntime({workspace,railwayToken:secrets.railway});
         if(runtime){
           upsert(checks,{id:'repair.railway-runtime',label:'Repaired Railway runtime',status:runtime.status,detail:runtime.detail,evidence:{source:'weaverelay-repair-verification',...(runtime.evidence||{})}});
-          if(runtime.evidence?.runtimeVerified===true){workspace.lastRepair={...workspace.lastRepair,runtimeVerified:true,verifiedAt:now};}
+          if(runtime.evidence?.runtimeVerified===true)workspace.lastRepair={...workspace.lastRepair,runtimeVerified:true,runtimeVerifiedAt:now};
         }
       }catch{
         upsert(checks,{id:'repair.railway-runtime',label:'Repaired Railway runtime',status:'WARN',detail:'The configuration repair is saved, but runtime verification could not complete in this diagnosis.',evidence:{source:'weaverelay-repair-verification',runtimeVerified:false}});
+      }
+
+      try{
+        const dependency=await verifyBackendSupabaseDependency({workspace});
+        if(dependency){
+          upsert(checks,{id:'repair.railway-supabase-dependency',label:'Repaired backend → Supabase',status:dependency.status,detail:dependency.detail,evidence:{source:'weaverelay-backend-dependency-proof',...(dependency.evidence||{})}});
+          if(dependency.evidence?.dependencyVerified===true)workspace.lastRepair={...workspace.lastRepair,dependencyVerified:true,fullChainVerified:true,verifiedAt:now};
+        }
+      }catch{
+        upsert(checks,{id:'repair.railway-supabase-dependency',label:'Repaired backend → Supabase',status:'WARN',detail:'The Railway backend is running, but application-level Supabase verification could not complete in this diagnosis.',evidence:{source:'weaverelay-backend-dependency-proof',dependencyVerified:false}});
       }
     }
 
