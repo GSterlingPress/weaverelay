@@ -89,6 +89,10 @@
   from = "/api/repair/stripe-webhook"
   to = "/.netlify/functions/repair-stripe-webhook"
   status = 200
+[[redirects]]
+  from = "/api/repair/stripe-handler-secret"
+  to = "/.netlify/functions/repair-stripe-handler-secret"
+  status = 200
 
 # Studio One is Client #1. It seeds evidence; provider authorization becomes source of truth.
 [[redirects]]
