@@ -3,6 +3,23 @@
 **Status:** PRODUCT DIRECTION
 **Updated:** 2026-09-02
 
+## Unified provider control plane
+
+WeaveRelay should increasingly behave like a **unified provider control plane**: one customer workspace containing small, evidence-backed live windows into the external services that power the application.
+
+A provider window is not a cloned provider dashboard and must not pretend to replace the provider. It should expose only the small subset of provider state and actions that directly matter to the connected application:
+
+- current live health and relationship status;
+- the few operational facts needed to understand what is happening now;
+- cost/risk signals when they materially affect the customer's next action;
+- the exact safe action WeaveRelay can perform with current authorization;
+- a precise provider destination when WeaveRelay cannot safely act;
+- verification immediately after every approved write.
+
+This creates a coherent experience across GitHub, Netlify, Railway, Supabase, Stripe, RunPod and ComfyUI: the customer can see the relevant slice of each system without repeatedly hunting through separate dashboards. Read-only evidence remains the default; write controls appear only when the action is narrow, proven, permissioned, explicitly approved when required, and verifiable.
+
+RunPod is the first strong operational example: its provider window may show running Pods, current effective hourly Pod rate when RunPod exposes it, stop eligibility, exact-Pod STOP controls, and an emergency reviewed-scope STOP ALL control. It must never silently expand an approved stop scope to Pods that appeared after the customer reviewed the panel.
+
 ## Sixth backend provider: RunPod
 
 RunPod is locked in as the sixth backend provider after GitHub, Netlify, Railway, Supabase, and Stripe.
@@ -10,6 +27,16 @@ RunPod is locked in as the sixth backend provider after GitHub, Netlify, Railway
 The customer application should visibly reserve a RunPod provider card now, but must label it **COMING NEXT** until WeaveRelay has a proven least-privilege connection probe, redaction rules, relationship checks, and safe repair boundaries. Do not expose a fake Connect action before those are implemented.
 
 RunPod spend, GPU provisioning, endpoint creation/deletion, and other financially meaningful compute actions are not routine diagnostic writes. They require explicit authenticated approval and must not be performed merely to test a connection.
+
+### RunPod cost safety and emergency stopping
+
+When RunPod exposes `adjustedCostPerHr`, WeaveRelay should use it as the effective current Pod rate because it reflects active Savings Plans; otherwise it may fall back to `costPerHr`. Rates must be labeled as RunPod credits/hour unless a stronger currency fact is proven.
+
+The RunPod provider window should show running Pod count, per-Pod effective rate when available, total known effective hourly rate, and whether each running Pod can safely be stopped through RunPod's stop operation.
+
+A single STOP POD action must re-prove the exact Pod in the connected account immediately before stopping it. A bulk emergency action must require explicit approval and carry an exact reviewed list of Pod IDs. The server must re-read current RunPod inventory and may stop only the intersection of that reviewed list with Pods that are still safely stoppable. Newly discovered or newly started Pods must never be silently added to the approved scope.
+
+Locked Pods and Pods with network volumes remain blocked from automatic stopping. WeaveRelay must not convert a STOP request into termination.
 
 ## Seventh backend layer: ComfyUI
 
