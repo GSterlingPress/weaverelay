@@ -5,6 +5,7 @@ import{diagnoseSnapshot,sanitizeSnapshot}from'./_diagnose.mjs';
 import{probeCredential,checkForProvider}from'./_provider-probes.mjs';
 import{buildCrossSystemEvidence}from'./_cross-system.mjs';
 import{buildEnvironmentDeploymentEvidence}from'./_environment-deployment.mjs';
+import{buildRuntimePaymentsEvidence}from'./_runtime-payments.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const upsert=(checks,live)=>{const ix=checks.findIndex(c=>c.id===live.id);if(ix>=0)checks[ix]=live;else checks.push(live)};
@@ -58,6 +59,13 @@ export default async request=>{
       for(const check of environment.checks)upsert(checks,check);
     }catch{
       upsert(checks,{id:'env.deployment-truth',label:'Environment / deployment truth',status:'WARN',detail:'The live provider checks completed, but environment/deployment metadata could not be fully evaluated.',evidence:{source:'weaverelay-environment-deployment'}});
+    }
+
+    try{
+      const runtimePayments=await buildRuntimePaymentsEvidence({workspace,secrets});
+      for(const check of runtimePayments.checks)upsert(checks,check);
+    }catch{
+      upsert(checks,{id:'runtime.payments-truth',label:'Runtime / payment boundary',status:'WARN',detail:'The live provider checks completed, but Railway runtime or Stripe webhook metadata could not be fully evaluated.',evidence:{source:'weaverelay-runtime-payments'}});
     }
 
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,topology,checks});
