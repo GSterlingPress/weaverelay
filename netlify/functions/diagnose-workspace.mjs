@@ -9,6 +9,7 @@ import{buildRuntimePaymentsEvidence}from'./_runtime-payments.mjs';
 import{verifyRailwayRepairRuntime}from'./_railway-redeploy-repair.mjs';
 import{verifyBackendSupabaseDependency}from'./_backend-dependency-proof.mjs';
 import{inspectStripeWebhookRepair}from'./_stripe-webhook-repair.mjs';
+import{verifyStripeWebhookDelivery}from'./_stripe-delivery-proof.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const upsert=(checks,live)=>{const ix=checks.findIndex(c=>c.id===live.id);if(ix>=0)checks[ix]=live;else checks.push(live)};
@@ -55,9 +56,9 @@ export default async request=>{
     }
 
     if(workspace.lastRepair?.type==='stripe-webhook-host'&&workspace.lastRepair?.configurationVerified===true){
-      const boundary=checkById(checks,'map.railway-stripe-webhook');const verified=boundary?.status==='PASS';
-      upsert(checks,{id:'repair.stripe-webhook',label:'Repaired Stripe → Railway webhook',status:verified?'PASS':'WARN',detail:verified?'The saved Stripe webhook now points to the Railway service proven to belong to this application.':'The Stripe webhook configuration was saved, but the live Stripe → Railway relationship is not yet proven by the current diagnosis.',evidence:{source:'weaverelay-stripe-webhook-repair',configurationVerified:true,boundaryVerified:verified,endpointUrlsRetained:false,signingSecretsRetained:false}});
-      if(verified)workspace.lastRepair={...workspace.lastRepair,runtimeVerified:true,fullChainVerified:true,verifiedAt:now};
+      const boundary=checkById(checks,'map.railway-stripe-webhook');const boundaryVerified=boundary?.status==='PASS';
+      upsert(checks,{id:'repair.stripe-webhook',label:'Repaired Stripe → Railway webhook',status:boundaryVerified?'PASS':'WARN',detail:boundaryVerified?'The saved Stripe webhook points to the Railway service proven to belong to this application. Delivery still requires separate post-repair evidence.':'The Stripe webhook configuration was saved, but the live Stripe → Railway destination relationship is not yet proven by the current diagnosis.',evidence:{source:'weaverelay-stripe-webhook-repair',configurationVerified:true,boundaryVerified,deliveryVerified:false,endpointUrlsRetained:false,signingSecretsRetained:false}});
+      try{const delivery=await verifyStripeWebhookDelivery({workspace,stripeToken:secrets.stripe});if(delivery){upsert(checks,{id:'repair.stripe-webhook-delivery',label:'Stripe webhook delivery → Railway handler',status:delivery.status,detail:delivery.detail,evidence:{source:'weaverelay-stripe-delivery-proof',...(delivery.evidence||{})}});if(delivery.evidence?.deliveryVerified===true)workspace.lastRepair={...workspace.lastRepair,runtimeVerified:true,deliveryVerified:true,fullChainVerified:true,verifiedAt:now};else workspace.lastRepair={...workspace.lastRepair,deliveryVerified:false,fullChainVerified:false}}}catch{upsert(checks,{id:'repair.stripe-webhook-delivery',label:'Stripe webhook delivery → Railway handler',status:'WARN',detail:'The Stripe webhook URL is correct, but delivery verification could not complete in this diagnosis.',evidence:{source:'weaverelay-stripe-delivery-proof',deliveryVerified:false,eventPayloadsRetained:false,endpointUrlsRetained:false}})}
     }
 
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,topology,checks});
