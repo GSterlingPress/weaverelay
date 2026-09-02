@@ -27,6 +27,23 @@ The customer application should reserve a ComfyUI card now labeled **COMING NEXT
 - app → RunPod → ComfyUI relationships agree;
 - any GPU provisioning, scaling, storage, or spend-affecting repair remains separately approval-gated.
 
+## VACE is a ComfyUI dependency, not provider #8
+
+Wan VACE is not a separate hosted backend account like RunPod, Railway, Stripe, or Supabase. It is a video-generation/editing model family and conditioning capability used inside a ComfyUI workflow. WeaveRelay should therefore test VACE underneath the ComfyUI card rather than ask the customer to connect a separate VACE provider.
+
+The dependency chain is:
+
+**APPLICATION → RUNPOD → COMFYUI → WORKFLOW → VACE / MODELS / NODES**
+
+For a VACE-based application, the workflow verifier should derive the exact node classes and model filenames referenced by the application's selected workflow, compare those requirements with ComfyUI's read-only `/object_info` metadata, and distinguish at minimum:
+
+- exact required node missing;
+- exact referenced model missing from the corresponding loader inventory;
+- VACE node available but model inventory not provable;
+- workflow compatible with the live ComfyUI runtime.
+
+The product may retain the small set of exact missing non-secret dependency names needed to tell the customer what to fix, but it should not retain the full ComfyUI node/model inventory or response bodies. It must never start a GPU workload merely to prove a VACE dependency.
+
 ## Next-fix guidance under provider cards
 
 A customer must never finish a diagnosis wondering what to click next.
