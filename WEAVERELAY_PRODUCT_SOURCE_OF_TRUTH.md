@@ -133,9 +133,13 @@ The founder should not need to connect customer systems, handle their credential
 
 ## Current state
 
-Current active work is still Stage 1: read-only cross-system diagnosis and environment/deployment truth.
+The active protected branch is `cross-system-diagnosis-v1`.
 
-The current protected development branch is `cross-system-diagnosis-v1`.
+Stage 1 now includes read-only provider health, cross-system mapping, deployment/environment truth, Railway runtime configuration evidence, Railway → Supabase correlation, and Stripe webhook-boundary evidence.
+
+A first **Stage 2 guided-repair pilot** now exists on the protected branch for a narrowly proven Railway → Supabase mismatch. It may change only Railway `SUPABASE_URL`, and only when independent live evidence proves exactly one deployed Railway service and exactly one intended Supabase project. The customer must explicitly approve immediately before the write. The mutation is read back and configuration-level verification is required. This repair must fail closed when the relationship is ambiguous. Live runtime/deployment verification remains a separate postcondition and must not be overstated.
+
+This repair is not yet a broad production promise and must not be marketed as generally available until production provider permissions and stranger end-to-end acceptance testing pass.
 
 The existing `WEAVERELAY_CLIENT_2_SOURCE_OF_TRUTH.md` remains the locked operational baseline for Client #2 / the production marketing site. This file governs overall product direction and must not erase that rollback/baseline document.
 
