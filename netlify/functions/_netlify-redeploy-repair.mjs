@@ -1,6 +1,6 @@
 const UA='weaverelay-netlify-redeploy';
 const clean=v=>String(v??'').trim();
-const hostOf=value=>{try{return new URL(value).hostname.toLowerCase()}catch{return''}};
+const hostOf=value=>{const raw=clean(value);if(!raw)return'';try{return new URL(raw.includes('://')?raw:`https://${raw}`).hostname.toLowerCase()}catch{return''}};
 const repoNorm=value=>clean(value).replace(/^git\+/, '').replace(/\.git$/,'').replace(/^git@github\.com:/,'https://github.com/').replace(/^ssh:\/\/git@github\.com\//,'https://github.com/').toLowerCase();
 const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
 
