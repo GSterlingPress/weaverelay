@@ -50,7 +50,7 @@
   to = "/.netlify/functions/workspace-claim-client"
   status = 200
 
-# Provider authorization + read-only probes
+# Provider authorization + diagnostics
 [[redirects]]
   from = "/api/provider/start"
   to = "/.netlify/functions/provider-start"
@@ -76,7 +76,13 @@
   to = "/.netlify/functions/diagnose-workspace"
   status = 200
 
-# Studio One is Client #1. It seeds evidence; provider OAuth becomes source of truth.
+# Approved, narrowly scoped repairs
+[[redirects]]
+  from = "/api/repair/railway-supabase"
+  to = "/.netlify/functions/repair-railway-supabase"
+  status = 200
+
+# Studio One is Client #1. It seeds evidence; provider authorization becomes source of truth.
 [[redirects]]
   from = "/api/relay/handshake"
   to = "/.netlify/functions/relay-handshake"
