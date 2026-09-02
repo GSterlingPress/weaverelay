@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - cross-system-diagnosis-v1
+      - post-production-hardening-2026-09-02
 
 permissions:
   contents: read

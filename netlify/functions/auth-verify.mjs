@@ -2,6 +2,8 @@ import { Resend } from 'resend';
 import { consumeLoginToken,sessionCookie } from './_auth.mjs';
 import { json } from './_http.mjs';
 
+export function shouldNotifyFounder(isNewUser){return isNewUser===true;}
+
 async function notifyFounder(user){
   const apiKey=process.env.RESEND_API_KEY;
   const to=process.env.WEAVERELAY_SIGNUP_NOTIFY_EMAIL;
@@ -24,8 +26,8 @@ export default async request=>{
   if(request.method!=='POST')return json(405,{ok:false,error:'Method not allowed.'});
   let body;try{body=await request.json()}catch{return json(400,{ok:false,error:'Invalid request.'})}
   try{
-    const{user,sessionToken,next}=await consumeLoginToken(body.token);
-    await notifyFounder(user);
+    const{user,sessionToken,next,isNewUser}=await consumeLoginToken(body.token);
+    if(shouldNotifyFounder(isNewUser))await notifyFounder(user);
     return json(200,{ok:true,user:{id:user.id,email:user.email},next},{'set-cookie':sessionCookie(sessionToken)});
   }catch(error){return json(400,{ok:false,error:error.message})}
 };
