@@ -76,6 +76,16 @@
   to = "/.netlify/functions/diagnose-workspace"
   status = 200
 
+# RunPod controls — exact Pod only; stop requires explicit approval
+[[redirects]]
+  from = "/api/runpod/pods"
+  to = "/.netlify/functions/runpod-pods"
+  status = 200
+[[redirects]]
+  from = "/api/runpod/stop"
+  to = "/.netlify/functions/runpod-stop-pod"
+  status = 200
+
 # Approved, narrowly scoped repairs
 [[redirects]]
   from = "/api/repair/railway-supabase"
