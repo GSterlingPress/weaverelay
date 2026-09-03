@@ -1,0 +1,25 @@
+name: Independent WeaveRelay Self Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/15 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe production independently
+        env:
+          WEAVERELAY_APEX_URL: https://weaverelay.com/
+          WEAVERELAY_WWW_URL: https://www.weaverelay.com/
+          WEAVERELAY_ORIGIN_URL: ${{ vars.WEAVERELAY_ORIGIN_URL }}
+        run: node scripts/self-monitor.mjs
