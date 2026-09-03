@@ -50,6 +50,12 @@
   to = "/.netlify/functions/workspace-claim-client"
   status = 200
 
+# Privacy-safe browser runtime telemetry from an authorized customer site
+[[redirects]]
+  from = "/api/runtime/beacon"
+  to = "/.netlify/functions/runtime-beacon"
+  status = 200
+
 # Provider authorization + diagnostics
 [[redirects]]
   from = "/api/provider/start"
