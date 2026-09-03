@@ -13,6 +13,7 @@ env:
 
 jobs:
   probe:
+    if: github.event_name != 'schedule' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -39,6 +40,12 @@ jobs:
       - name: Evaluate incident and recovery transition
         run: node scripts/self-monitor-state.mjs
 
+      - name: Persist incident state before notification
+        uses: actions/cache/save@v4
+        with:
+          path: .self-monitor-state.json
+          key: ${{ env.STATE_KEY }}-${{ github.run_id }}
+
       - name: Send transition email
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -46,19 +53,15 @@ jobs:
           WEAVERELAY_ALERT_FROM: ${{ vars.WEAVERELAY_ALERT_FROM }}
         run: node scripts/self-monitor-notify.mjs
 
-      - name: Persist incident state
-        uses: actions/cache/save@v4
-        with:
-          path: .self-monitor-state.json
-          key: ${{ env.STATE_KEY }}-${{ github.run_id }}
-
       - name: Publish privacy-safe monitor evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: self-monitor-${{ github.run_id }}
           path: |
             .self-monitor-report.json
             .self-monitor-event.json
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Fail workflow when outage remains active
