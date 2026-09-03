@@ -51,6 +51,7 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           WEAVERELAY_ALERT_TO: ${{ secrets.WEAVERELAY_ALERT_TO }}
           WEAVERELAY_ALERT_FROM: ${{ vars.WEAVERELAY_ALERT_FROM }}
+          WEAVERELAY_NOTIFICATION_DRY_RUN: ${{ github.ref == 'refs/heads/main' && '0' || '1' }}
         run: node scripts/self-monitor-notify.mjs
 
       - name: Publish privacy-safe monitor evidence
