@@ -7,7 +7,7 @@ const required={
  '/api/workspace':'workspace-get',
  '/api/workspace/create':'workspace-create',
  '/api/workspace/monitoring':'workspace-monitoring',
- '/api/diagnose':'diagnose-workspace-expanded',
+ '/api/diagnose':'diagnose-workspace-truth',
  '/api/runtime/beacon':'runtime-beacon',
  '/api/synthetic/journey':'synthetic-journey-config',
  '/api/synthetic/run':'synthetic-journey-run',
