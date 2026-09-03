@@ -40,6 +40,14 @@ test('continuing outage is deduplicated', () => {
   assert.equal(second.state.activeIncident.id,first.state.activeIncident.id);
 });
 
+test('one recovered hostname is not enough to announce recovery', () => {
+  const first=run({report:report(false)});
+  const partial={...report(true),observations:{apex:probe(true),www:probe(false)}};
+  const r=run({report:partial,state:first.state});
+  assert.equal(r.state.phase,'incident');
+  assert.equal(r.event.send,false);
+});
+
 test('verified public recovery emits exactly one recovery', () => {
   const first=run({report:report(false)});
   const recovered=run({report:report(true),state:first.state});
