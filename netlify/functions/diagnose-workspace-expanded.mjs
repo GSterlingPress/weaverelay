@@ -5,6 +5,8 @@ import{decryptSecret}from'./_vault.mjs';
 import{probeCredential,checkForProvider}from'./_provider-probes.mjs';
 import{diagnoseSnapshot,sanitizeSnapshot}from'./_diagnose.mjs';
 import{augmentDiagnosis}from'./_diagnosis-expansion.mjs';
+import{buildWebsiteDiagnosticEvidence,augmentWebsiteDiagnosis}from'./_website-diagnostics.mjs';
+import{applyClosestProviderFixLinks}from'./_provider-fix-links.mjs';
 import{verifyNetlifyRedeploy}from'./_netlify-redeploy-repair.mjs';
 
 const EXPANDED=['vercel','render','cloudflare','neon','resend'];
@@ -25,6 +27,7 @@ export default async request=>{
         upsert(checks,{id:`${provider}.live`,label:provider[0].toUpperCase()+provider.slice(1),status:'WARN',detail:`Live ${provider} probe could not complete.`,evidence:{source:'weaverelay-live-expanded',resourceBodiesRetained:false}});
       }
     }
+    if(workspace.siteOrigin)try{const website=await buildWebsiteDiagnosticEvidence(workspace.siteOrigin);for(const websiteCheck of website.checks)upsert(checks,websiteCheck)}catch{upsert(checks,{id:'website.diagnostics','Website diagnostics',status:'WARN',detail:'The website diagnostic layer could not complete in this run.',evidence:{source:'weaverelay-website-diagnostics',customerDataRetained:false}})}
     if(workspace.lastRepair?.type==='netlify-redeploy'&&workspace.lastRepair?.verificationPending===true){
       const [netlifyToken,githubToken]=await Promise.all([tokenFor(workspace.id,'netlify'),tokenFor(workspace.id,'github')]);
       try{
@@ -36,7 +39,9 @@ export default async request=>{
     }
     const seed=workspace.lastDiagnosticSnapshot||workspace.seedSnapshot||{product:workspace.name,topology:workspace.stackMap||{}};
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,checks});
-    const diagnosis=augmentDiagnosis(diagnoseSnapshot(snapshot),snapshot);
+    let diagnosis=augmentDiagnosis(diagnoseSnapshot(snapshot),snapshot);
+    diagnosis=augmentWebsiteDiagnosis(diagnosis,snapshot);
+    diagnosis=applyClosestProviderFixLinks(diagnosis,snapshot);
     workspace.lastDiagnosticSnapshot=snapshot;workspace.diagnosis=diagnosis;workspace.status=diagnosis.status==='healthy'?'ready':'needs_action';workspace.updatedAt=now;await writeWorkspace(workspace);
     return new Response(JSON.stringify({ok:true,workspaceId:workspace.id,diagnosis,checks:snapshot.checks,stackMap:workspace.stackMap||snapshot.topology}),{status:200,headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
   }catch{return base}
