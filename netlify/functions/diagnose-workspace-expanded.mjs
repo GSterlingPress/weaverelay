@@ -27,7 +27,7 @@ export default async request=>{
         upsert(checks,{id:`${provider}.live`,label:provider[0].toUpperCase()+provider.slice(1),status:'WARN',detail:`Live ${provider} probe could not complete.`,evidence:{source:'weaverelay-live-expanded',resourceBodiesRetained:false}});
       }
     }
-    if(workspace.siteOrigin)try{const website=await buildWebsiteDiagnosticEvidence(workspace.siteOrigin);for(const websiteCheck of website.checks)upsert(checks,websiteCheck)}catch{upsert(checks,{id:'website.diagnostics','Website diagnostics',status:'WARN',detail:'The website diagnostic layer could not complete in this run.',evidence:{source:'weaverelay-website-diagnostics',customerDataRetained:false}})}
+    if(workspace.siteOrigin)try{const website=await buildWebsiteDiagnosticEvidence(workspace.siteOrigin);for(const websiteCheck of website.checks)upsert(checks,websiteCheck)}catch{upsert(checks,{id:'website.diagnostics',label:'Website diagnostics',status:'WARN',detail:'The website diagnostic layer could not complete in this run.',evidence:{source:'weaverelay-website-diagnostics',customerDataRetained:false}})}
     if(workspace.lastRepair?.type==='netlify-redeploy'&&workspace.lastRepair?.verificationPending===true){
       const [netlifyToken,githubToken]=await Promise.all([tokenFor(workspace.id,'netlify'),tokenFor(workspace.id,'github')]);
       try{
