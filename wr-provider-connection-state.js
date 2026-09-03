@@ -19,6 +19,7 @@ let timer=null,lastSignature='';
 function chip(card,text,kind){const c=card?.querySelector('.chip');if(!c)return;c.textContent=text;c.classList.remove('good','warn','bad');c.classList.add(kind)}
 function button(card){return card?.querySelector('.provider-action,.expanded-provider-connect')||null}
 function stateOf(provider,connection){return String(connection?.status||provider?.status||'not_connected')}
+function renderNextFix(diagnosis){const box=document.querySelector('#nextFixGuide'),first=diagnosis?.findings?.[0];if(!box||!first)return;const contract=C[first.provider];if(!contract)return;box.className='next-fix-guide attention-guide';box.innerHTML=`<strong>NEXT FIX</strong><span>WeaveRelay found the next problem at ${contract.label}. Open the ${contract.label} card or the diagnosis below to continue with the closest proven fix.</span>`}
 async function recheckComfy(buttonEl,runpodConnected){
  if(!runpodConnected){document.querySelector('.provider-card[data-provider="runpod"]')?.scrollIntoView({behavior:'smooth',block:'center'});return}
  const workspaceId=id();if(!workspaceId)return;const old=buttonEl.textContent;buttonEl.disabled=true;buttonEl.textContent='RECHECKING…';
@@ -44,6 +45,7 @@ async function normalize(){
    else if(status==='error'||status==='revoked'||status==='needs_action'){chip(card,'NEEDS ACTION','bad');if(b)b.textContent=`RECONNECT ${contract.label.toUpperCase()}`}
    else{chip(card,'CONNECT','warn');if(b)b.textContent=contract.connect}
  }
+ renderNextFix(j.workspace?.diagnosis);
 }
 function schedule(){clearTimeout(timer);timer=setTimeout(normalize,180)}
 const host=document.querySelector('#providers');if(host)new MutationObserver(schedule).observe(host,{childList:true,subtree:true});
