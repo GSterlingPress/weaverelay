@@ -7,6 +7,8 @@ import{diagnoseSnapshot,sanitizeSnapshot}from'./_diagnose.mjs';
 import{augmentDiagnosis}from'./_diagnosis-expansion.mjs';
 import{buildWebsiteDiagnosticEvidence,augmentWebsiteDiagnosis}from'./_website-diagnostics.mjs';
 import{browserRuntimeEvidence}from'./_browser-runtime.mjs';
+import{readLatestSyntheticEvidence}from'./_synthetic-journey.mjs';
+import{augmentSyntheticDiagnosis}from'./_synthetic-diagnosis.mjs';
 import{applyClosestProviderFixLinks}from'./_provider-fix-links.mjs';
 import{verifyNetlifyRedeploy}from'./_netlify-redeploy-repair.mjs';
 
@@ -30,6 +32,7 @@ export default async request=>{
     }
     if(workspace.siteOrigin)try{const website=await buildWebsiteDiagnosticEvidence(workspace.siteOrigin);for(const websiteCheck of website.checks)upsert(checks,websiteCheck)}catch{upsert(checks,{id:'website.diagnostics',label:'Website diagnostics',status:'WARN',detail:'The website diagnostic layer could not complete in this run.',evidence:{source:'weaverelay-website-diagnostics',customerDataRetained:false}})}
     try{const runtime=await browserRuntimeEvidence(workspace.id);for(const runtimeCheck of runtime.checks)upsert(checks,runtimeCheck)}catch{upsert(checks,{id:'website.browser-runtime',label:'Browser runtime',status:'WARN',detail:'Browser runtime evidence could not be read in this diagnosis.',evidence:{source:'weaverelay-browser-runtime',customerContentRetained:false}})}
+    try{upsert(checks,await readLatestSyntheticEvidence(workspace.id))}catch{upsert(checks,{id:'website.synthetic-journey',label:'Approved synthetic journeys',status:'WARN',detail:'Synthetic journey evidence could not be read in this diagnosis.',evidence:{source:'weaverelay-synthetic-browser',browserReplayProven:false,mutationRequestsAllowed:false}})}
     if(workspace.lastRepair?.type==='netlify-redeploy'&&workspace.lastRepair?.verificationPending===true){
       const [netlifyToken,githubToken]=await Promise.all([tokenFor(workspace.id,'netlify'),tokenFor(workspace.id,'github')]);
       try{
@@ -43,6 +46,7 @@ export default async request=>{
     const snapshot=sanitizeSnapshot({...seed,product:workspace.name,generatedAt:now,checks});
     let diagnosis=augmentDiagnosis(diagnoseSnapshot(snapshot),snapshot);
     diagnosis=augmentWebsiteDiagnosis(diagnosis,snapshot);
+    diagnosis=augmentSyntheticDiagnosis(diagnosis,snapshot);
     diagnosis=applyClosestProviderFixLinks(diagnosis,snapshot);
     workspace.lastDiagnosticSnapshot=snapshot;workspace.diagnosis=diagnosis;workspace.status=diagnosis.status==='healthy'?'ready':'needs_action';workspace.updatedAt=now;await writeWorkspace(workspace);
     return new Response(JSON.stringify({ok:true,workspaceId:workspace.id,diagnosis,checks:snapshot.checks,stackMap:workspace.stackMap||snapshot.topology}),{status:200,headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}});
