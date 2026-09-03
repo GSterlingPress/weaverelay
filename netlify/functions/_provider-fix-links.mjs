@@ -1,3 +1,4 @@
+import{prioritizeDiagnosis}from'./_diagnosis-priority.mjs';
 const clean=v=>String(v??'').trim();
 const enc=v=>encodeURIComponent(clean(v));
 
@@ -88,5 +89,5 @@ export function applyClosestProviderFixLinks(diagnosis={},snapshot={}){
   const checks=new Map((snapshot.checks||[]).map(c=>[c.id,c]));
   for(const finding of diagnosis.findings||[]){if(!finding.provider)continue;const link=closestProviderFixLink(finding.provider,evidenceForFinding(finding,checks));if(link)finding.openProvider=link}
   diagnosis.safeRepairs=(diagnosis.safeRepairs||[]).map(repair=>{const finding=(diagnosis.findings||[]).find(f=>f.id===repair.finding);return finding?.openProvider?{...repair,openProvider:finding.openProvider}:repair});
-  return diagnosis;
+  return prioritizeDiagnosis(diagnosis,snapshot);
 }
