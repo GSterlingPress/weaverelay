@@ -1,8 +1,10 @@
+import fs from 'node:fs';
 import { buildSelfMonitorReport, probeUrl } from '../netlify/functions/_self-monitor-core.mjs';
 
 const apexUrl = process.env.WEAVERELAY_APEX_URL || 'https://weaverelay.com/';
 const wwwUrl = process.env.WEAVERELAY_WWW_URL || 'https://www.weaverelay.com/';
 const originUrl = process.env.WEAVERELAY_ORIGIN_URL || '';
+const reportPath = process.env.WEAVERELAY_MONITOR_REPORT_PATH || '.self-monitor-report.json';
 
 async function readNetlifyStatus() {
   try {
@@ -32,5 +34,7 @@ const [apex, www, origin, providerStatus] = await Promise.all([
 ]);
 
 const report = buildSelfMonitorReport({ apex, www, origin, providerStatus });
+fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
-if (report.classification.severity === 'critical') process.exitCode = 2;
+// Incident/recovery state is evaluated in a separate step so a critical outage
+// can still persist state and send exactly one alert before the workflow fails.
