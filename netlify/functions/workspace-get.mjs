@@ -1,1 +1,55 @@
-import{requireUser}from'./_auth.mjs';import{requireWorkspace,readConnection}from'./_workspace-store.mjs';import{json,safeError}from'./_http.mjs';export default async request=>{try{const user=await requireUser(request),url=new URL(request.url),workspace=await requireWorkspace(user.id,url.searchParams.get('id'));const connections={};for(const p of workspace.providers||[]){const c=await readConnection(workspace.id,p.id).catch(()=>null);if(c)connections[p.id]={status:c.status,externalAccountName:c.externalAccountName||null,scopes:c.scopes||[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:c.lastErrorCode||null};}return json(200,{ok:true,workspace,connections});}catch(error){return safeError(error)}};
+import { getStore } from '@netlify/blobs';
+import{requireUser}from'./_auth.mjs';
+import{requireWorkspace,readConnection}from'./_workspace-store.mjs';
+import{json,safeError}from'./_http.mjs';
+
+const monitorStore=()=>getStore({name:'weaverelay-monitoring',consistency:'strong'});
+const clean=v=>String(v??'').trim();
+
+function safeIncident(value){
+  if(!value||typeof value!=='object')return null;
+  const evidence=value.evidence&&typeof value.evidence==='object'?{
+    id:clean(value.evidence.id).slice(0,120)||null,
+    label:clean(value.evidence.label).slice(0,160)||null,
+    status:clean(value.evidence.status).slice(0,20)||null,
+    detail:clean(value.evidence.detail).slice(0,500)||null
+  }:null;
+  return{
+    active:Boolean(value.active),
+    kind:clean(value.kind).slice(0,60)||null,
+    title:clean(value.title).slice(0,180)||null,
+    whatIsHappening:clean(value.whatIsHappening).slice(0,500)||null,
+    whereItBreaks:clean(value.whereItBreaks).slice(0,180)||null,
+    evidenceId:clean(value.evidenceId).slice(0,120)||null,
+    evidence,
+    publicSiteHealthy:Boolean(value.publicSiteHealthy),
+    automaticRepairAttempted:false,
+    startedAt:value.startedAt||null,
+    lastObservedAt:value.lastObservedAt||null,
+    recoveredAt:value.recoveredAt||null
+  };
+}
+
+export default async request=>{
+  try{
+    const user=await requireUser(request),url=new URL(request.url),workspace=await requireWorkspace(user.id,url.searchParams.get('id'));
+    const connections={};
+    for(const p of workspace.providers||[]){
+      const c=await readConnection(workspace.id,p.id).catch(()=>null);
+      if(c)connections[p.id]={status:c.status,externalAccountName:c.externalAccountName||null,scopes:c.scopes||[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:c.lastErrorCode||null};
+    }
+    const state=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'}).catch(()=>null);
+    const monitoringState=state?{
+      status:clean(state.status).slice(0,30)||'unknown',
+      lastCheckedAt:state.lastCheckedAt||null,
+      lastHttpStatus:Number.isFinite(state.lastHttpStatus)?state.lastHttpStatus:null,
+      incidentKind:clean(state.incidentKind).slice(0,60)||null,
+      incident:safeIncident(state.incidentSummary),
+      lastRecoveredIncident:safeIncident(state.lastRecoveredIncident),
+      alertedAt:state.alertedAt||null,
+      recoveredAt:state.recoveredAt||null,
+      automaticRepairAttempted:false
+    }:null;
+    return json(200,{ok:true,workspace,connections,monitoringState});
+  }catch(error){return safeError(error)}
+};
