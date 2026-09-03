@@ -8,18 +8,60 @@ on:
 permissions:
   contents: read
 
+env:
+  STATE_KEY: weaverelay-self-monitor-state-v1
+
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
+      - name: Restore incident state
+        uses: actions/cache/restore@v4
+        with:
+          path: .self-monitor-state.json
+          key: ${{ env.STATE_KEY }}-${{ github.run_id }}
+          restore-keys: |
+            ${{ env.STATE_KEY }}-
+
       - name: Probe production independently
         env:
           WEAVERELAY_APEX_URL: https://weaverelay.com/
           WEAVERELAY_WWW_URL: https://www.weaverelay.com/
           WEAVERELAY_ORIGIN_URL: ${{ vars.WEAVERELAY_ORIGIN_URL }}
         run: node scripts/self-monitor.mjs
+
+      - name: Evaluate incident and recovery transition
+        run: node scripts/self-monitor-state.mjs
+
+      - name: Send transition email
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          WEAVERELAY_ALERT_TO: ${{ secrets.WEAVERELAY_ALERT_TO }}
+          WEAVERELAY_ALERT_FROM: ${{ vars.WEAVERELAY_ALERT_FROM }}
+        run: node scripts/self-monitor-notify.mjs
+
+      - name: Persist incident state
+        uses: actions/cache/save@v4
+        with:
+          path: .self-monitor-state.json
+          key: ${{ env.STATE_KEY }}-${{ github.run_id }}
+
+      - name: Publish privacy-safe monitor evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-monitor-${{ github.run_id }}
+          path: |
+            .self-monitor-report.json
+            .self-monitor-event.json
+          retention-days: 14
+
+      - name: Fail workflow when outage remains active
+        shell: bash
+        run: |
+          node -e "const fs=require('fs');const s=JSON.parse(fs.readFileSync('.self-monitor-state.json','utf8'));if(s.phase==='incident')process.exit(2)"
