@@ -1,0 +1,5 @@
+import{requireUser}from'./_auth.mjs';
+import{requireWorkspace}from'./_workspace-store.mjs';
+import{readJourneyConfig,invokeBrowserRunner,buildSyntheticEvidence}from'./_synthetic-journey.mjs';
+import{json,safeError}from'./_http.mjs';
+export default async request=>{if(request.method!=='POST')return json(405,{error:'Method not allowed.'});try{const user=await requireUser(request),body=await request.json(),workspace=await requireWorkspace(user.id,body.workspaceId),id=String(body.journeyId||'').trim(),config=await readJourneyConfig(workspace.id),journey=(config.journeys||[]).find(j=>j.id===id&&j.approved===true);if(!journey)return json(404,{error:'Approved synthetic journey not found.'});if(body.approved!==true)return json(409,{error:'Explicit approval is required for each synthetic journey run.'});const result=await invokeBrowserRunner(workspace,journey);return json(200,{ok:true,workspaceId:workspace.id,journeyId:journey.id,result,evidence:buildSyntheticEvidence(result)})}catch(error){return safeError(error)}};
