@@ -10,7 +10,7 @@ import { buildEnvironmentDeploymentEvidence } from './_environment-deployment.mj
 import { buildRuntimePaymentsEvidence } from './_runtime-payments.mjs';
 import { buildRunPodComfyUIEvidence } from './_runpod-comfyui-proof.mjs';
 import { buildRunPodAppRelationshipEvidence } from './_runpod-app-relationship.mjs';
-import { classifyOperationalHealth } from './_functional-monitoring.mjs';
+import { classifyOperationalHealth,customerIncidentSummary } from './_functional-monitoring.mjs';
 import { probePublicSite,advanceMonitorState,normalizeMonitoring,isMonitorDue,buildOutageEmail,buildRecoveryEmail } from './_monitoring.mjs';
 
 const control=()=>getStore({name:'weaverelay-control-plane',consistency:'strong'});
@@ -88,20 +88,29 @@ async function processWorkspace(workspace){
   const deep=await deepDiagnosis(workspace,siteObservation).catch(()=>null);
   const diagnosis=deep?.diagnosis||null;
   const operational=classifyOperationalHealth({siteObservation,checks:deep?.checks||[]});
+  const incidentSummary=customerIncidentSummary(operational);
   const observation={...siteObservation,status:operational.status,detail:operational.detail,incidentKind:operational.incidentKind,evidenceId:operational.evidenceId};
   let next=advanceMonitorState(previous,observation,monitoring);
+  const now=next.lastCheckedAt||new Date().toISOString();
+  const continuingIncident=incidentSummary.active&&(previous.status==='broken'||previous.status==='attention');
+  if(incidentSummary.active){
+    incidentSummary.startedAt=continuingIncident?(previous.incidentSummary?.startedAt||previous.lastCheckedAt||now):now;
+    incidentSummary.lastObservedAt=now;
+  }
   const email=await ownerEmail(workspace.ownerId);
   if(next.shouldAlertDown){
     const sent=await sendEmail(email,buildOutageEmail({workspace,observation,diagnosis,checkedAt:next.lastCheckedAt}));
     if(!sent)next={...next,alertedAt:null,shouldAlertDown:false,alertDeliveryFailedAt:new Date().toISOString()};
   }else if(next.shouldAlertRecovery){
-    const sent=await sendEmail(email,buildRecoveryEmail({workspace,observation,checkedAt:next.lastCheckedAt}));
+    const recoveryObservation={...observation,incidentKind:previous.incidentKind||previous.incidentSummary?.kind||observation.incidentKind};
+    const sent=await sendEmail(email,buildRecoveryEmail({workspace,observation:recoveryObservation,checkedAt:next.lastCheckedAt}));
     if(!sent)next={...next,status:'broken',incidentId:previous.incidentId||next.incidentId,alertedAt:previous.alertedAt||null,recoveredAt:null,shouldAlertRecovery:false,recoveryAlertDeliveryFailedAt:new Date().toISOString()};
   }
-  next={...next,workspaceId:workspace.id,incidentKind:operational.incidentKind,evidenceId:operational.evidenceId,publicSiteHealthy:Boolean(operational.publicSiteHealthy),lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticFindingCount:diagnosis?.findings?.length||0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
+  const recoveredIncident=!incidentSummary.active&&previous.incidentSummary?.active?{...previous.incidentSummary,active:false,recoveredAt:now}:previous.lastRecoveredIncident||null;
+  next={...next,workspaceId:workspace.id,incidentKind:operational.incidentKind,evidenceId:operational.evidenceId,publicSiteHealthy:Boolean(operational.publicSiteHealthy),incidentSummary,lastRecoveredIncident:recoveredIncident,lastDiagnosisHeadline:diagnosis?.headline||null,lastDiagnosisStatus:diagnosis?.status||null,lastFindingId:diagnosis?.findings?.[0]?.id||null,lastFindingSeverity:diagnosis?.findings?.[0]?.severity||null,diagnosticFindingCount:diagnosis?.findings?.length||0,automaticRepairAttempted:false,automaticRepairReason:monitoring.autoRepairMode==='preapproved-only'?'Pre-approved repair execution is still gated until the repair-policy contract passes end-to-end validation.':'Automatic repair is disabled for this workspace.'};
   delete next.shouldAlertDown;delete next.shouldAlertRecovery;
   await monitorStore().setJSON(`state/${workspace.id}.json`,next);
-  return{workspaceId:workspace.id,status:next.status,incidentKind:next.incidentKind,alerted:Boolean(next.alertedAt),diagnosis:next.lastDiagnosisHeadline||null};
+  return{workspaceId:workspace.id,status:next.status,incidentKind:next.incidentKind,alerted:Boolean(next.alertedAt),incidentSummary:next.incidentSummary,diagnosis:next.lastDiagnosisHeadline||null};
 }
 
 export default async()=>{
