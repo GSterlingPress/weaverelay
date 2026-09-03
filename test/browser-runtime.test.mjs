@@ -1,7 +1,7 @@
 import test from'node:test';
 import assert from'node:assert/strict';
 import fs from'node:fs';
-import{sanitizeRuntimeEvent,sanitizeRuntimeBatch,runtimeCheckFromEvents}from'../netlify/functions/_browser-runtime.mjs';
+import{sanitizeRuntimeEvent,sanitizeRuntimeBatch,runtimeCheckFromEvents,boundedRuntimeWindow}from'../netlify/functions/_browser-runtime.mjs';
 import{augmentWebsiteDiagnosis}from'../netlify/functions/_website-diagnostics.mjs';
 
 test('runtime sanitizer strips URL query secrets and ignores arbitrary event types',()=>{
@@ -17,6 +17,19 @@ test('runtime batch is bounded and accepts only diagnostic event types',()=>{
  const out=sanitizeRuntimeBatch(input);
  assert.ok(out.length<=20);
  assert.ok(out.every(x=>x.type==='javascript-error'));
+});
+
+test('runtime ingestion window caps noisy sites without losing the stored diagnostic model',()=>{
+ const now=Date.parse('2026-09-03T14:00:30Z');
+ const first=boundedRuntimeWindow({},100,{now,limit:120});
+ assert.equal(first.accepted,100);
+ assert.equal(first.rateLimited,false);
+ const second=boundedRuntimeWindow({windowStartedAt:first.windowStartedAt,windowAccepted:100},40,{now:now+1000,limit:120});
+ assert.equal(second.accepted,20);
+ assert.equal(second.rateLimited,true);
+ const reset=boundedRuntimeWindow({windowStartedAt:first.windowStartedAt,windowAccepted:120},5,{now:now+61000,limit:120});
+ assert.equal(reset.accepted,5);
+ assert.equal(reset.windowAccepted,5);
 });
 
 test('runtime evidence correlates a journey with the exact failing API without customer payloads',()=>{
@@ -53,4 +66,16 @@ test('runtime agent never reads form values, cookies, response bodies, or reques
  assert.match(source,/fetch-failure/);
  assert.match(source,/xhr-failure/);
  assert.match(source,/data-weaverelay-journey|weaverelayJourney/);
+ assert.match(source,/rawFetch/);
+ assert.match(source,/isSelf/);
+});
+
+test('runtime observer is routed and surfaced in the app without enabling automatic clicks',()=>{
+ const app=fs.readFileSync(new URL('../app.html',import.meta.url),'utf8');
+ const netlify=fs.readFileSync(new URL('../netlify.toml',import.meta.url),'utf8');
+ const setup=fs.readFileSync(new URL('../wr-runtime-setup.js',import.meta.url),'utf8');
+ assert.match(app,/wr-runtime-setup\.js/);
+ assert.match(netlify,/\/api\/runtime\/beacon/);
+ assert.match(setup,/does not perform the interaction itself/i);
+ assert.doesNotMatch(setup,/AUTO.?CLICK|AUTO.?SUBMIT/i);
 });
