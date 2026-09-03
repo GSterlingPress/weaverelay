@@ -61,6 +61,12 @@ test('business-function incident email identifies a broken function',()=>{
   assert.match(mail.subject,/critical function is broken/i);
 });
 
+test('functional recovery email says the monitored function recovered',()=>{
+  const mail=buildRecoveryEmail({workspace:{name:'Studio One'},observation:{incidentKind:'critical-dependency',detail:'The backend path is healthy again.'},checkedAt:'2026-09-02T19:15:00.000Z'});
+  assert.match(mail.subject,/monitored function is healthy again/i);
+  assert.match(mail.text,/healthy again/i);
+});
+
 test('recovery email is explicit',()=>{
   const mail=buildRecoveryEmail({workspace:{name:'Studio One'},observation:{detail:'The production site answered HTTP 200.'},checkedAt:'2026-09-02T19:15:00.000Z'});
   assert.match(mail.subject,/recovery/i);
