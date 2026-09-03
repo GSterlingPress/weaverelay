@@ -6,6 +6,7 @@ import{probeCredential,checkForProvider}from'./_provider-probes.mjs';
 import{diagnoseSnapshot,sanitizeSnapshot}from'./_diagnose.mjs';
 import{augmentDiagnosis}from'./_diagnosis-expansion.mjs';
 import{buildWebsiteDiagnosticEvidence,augmentWebsiteDiagnosis}from'./_website-diagnostics.mjs';
+import{browserRuntimeEvidence}from'./_browser-runtime.mjs';
 import{applyClosestProviderFixLinks}from'./_provider-fix-links.mjs';
 import{verifyNetlifyRedeploy}from'./_netlify-redeploy-repair.mjs';
 
@@ -28,6 +29,7 @@ export default async request=>{
       }
     }
     if(workspace.siteOrigin)try{const website=await buildWebsiteDiagnosticEvidence(workspace.siteOrigin);for(const websiteCheck of website.checks)upsert(checks,websiteCheck)}catch{upsert(checks,{id:'website.diagnostics',label:'Website diagnostics',status:'WARN',detail:'The website diagnostic layer could not complete in this run.',evidence:{source:'weaverelay-website-diagnostics',customerDataRetained:false}})}
+    try{const runtime=await browserRuntimeEvidence(workspace.id);for(const runtimeCheck of runtime.checks)upsert(checks,runtimeCheck)}catch{upsert(checks,{id:'website.browser-runtime',label:'Browser runtime',status:'WARN',detail:'Browser runtime evidence could not be read in this diagnosis.',evidence:{source:'weaverelay-browser-runtime',customerContentRetained:false}})}
     if(workspace.lastRepair?.type==='netlify-redeploy'&&workspace.lastRepair?.verificationPending===true){
       const [netlifyToken,githubToken]=await Promise.all([tokenFor(workspace.id,'netlify'),tokenFor(workspace.id,'github')]);
       try{
