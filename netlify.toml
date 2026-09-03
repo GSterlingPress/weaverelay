@@ -56,6 +56,16 @@
   to = "/.netlify/functions/runtime-beacon"
   status = 200
 
+# Explicitly approved, non-destructive synthetic browser journeys
+[[redirects]]
+  from = "/api/synthetic/journey"
+  to = "/.netlify/functions/synthetic-journey-config"
+  status = 200
+[[redirects]]
+  from = "/api/synthetic/run"
+  to = "/.netlify/functions/synthetic-journey-run"
+  status = 200
+
 # Provider authorization + diagnostics
 [[redirects]]
   from = "/api/provider/start"
