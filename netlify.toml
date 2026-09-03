@@ -49,6 +49,10 @@
   from = "/api/workspace/claim-client"
   to = "/.netlify/functions/workspace-claim-client"
   status = 200
+[[redirects]]
+  from = "/api/workspace/monitoring"
+  to = "/.netlify/functions/workspace-monitoring"
+  status = 200
 
 # Privacy-safe browser runtime telemetry from an authorized customer site
 [[redirects]]
