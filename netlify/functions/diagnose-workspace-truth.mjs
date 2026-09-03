@@ -8,6 +8,7 @@ import{augmentSyntheticDiagnosis}from'./_synthetic-diagnosis.mjs';
 import{applyClosestProviderFixLinks}from'./_provider-fix-links.mjs';
 import{reconcileEvidence}from'./_evidence-truth.mjs';
 import{prioritizeDiagnosis}from'./_diagnosis-priority.mjs';
+import{explainDiagnosis}from'./_evidence-explanation.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const SYNC_SOURCES=new Set(['weaverelay-repair-verification','weaverelay-netlify-redeploy-verification','weaverelay-backend-dependency-proof','weaverelay-cross-system','weaverelay-runtime-payments','weaverelay-environment-deployment','weaverelay-live-oauth','weaverelay-live-expanded','weaverelay-live','weaverelay-website-diagnostics','weaverelay-stripe-handler-diagnosis']);
@@ -32,6 +33,7 @@ export default async request=>{
     diagnosis=applyClosestProviderFixLinks(diagnosis,snapshot);
     diagnosis=addTruthFinding(diagnosis,snapshot);
     diagnosis=prioritizeDiagnosis(diagnosis,snapshot);
+    diagnosis=explainDiagnosis(diagnosis,snapshot);
     workspace.lastDiagnosticSnapshot=snapshot;workspace.diagnosis=diagnosis;workspace.status=diagnosis.status==='healthy'?'ready':'needs_action';workspace.updatedAt=now;await writeWorkspace(workspace);
     return json(200,{ok:true,workspaceId:workspace.id,diagnosis,checks:snapshot.checks,truthSummary:snapshot.truthSummary,stackMap:workspace.stackMap||snapshot.topology});
   }catch(error){if(expandedCompleted&&user&&body&&before)await restorePriorTruth(user.id,body.workspaceId,before);return safeError(error)}
