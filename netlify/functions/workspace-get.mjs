@@ -30,6 +30,27 @@ function safeIncident(value){
   };
 }
 
+function legacyMonitoringIncident(monitoringState){
+  if(!monitoringState)return null;
+  const incident=monitoringState.incident||monitoringState.lastRecoveredIncident;
+  if(!incident)return null;
+  const recovered=!monitoringState.incident&&Boolean(monitoringState.lastRecoveredIncident);
+  return{
+    status:recovered?'recovered':monitoringState.status||'attention',
+    incidentKind:monitoringState.incidentKind||incident.kind||null,
+    whereItBreaks:incident.whereItBreaks||null,
+    whatsHappening:incident.whatIsHappening||incident.title||null,
+    detail:incident.whatIsHappening||incident.title||null,
+    evidenceId:incident.evidenceId||incident.evidence?.id||null,
+    evidenceLabel:incident.evidence?.label||null,
+    publicSiteHealthy:Boolean(incident.publicSiteHealthy),
+    startedAt:incident.startedAt||null,
+    lastObservedAt:incident.lastObservedAt||monitoringState.lastCheckedAt||null,
+    recoveredAt:incident.recoveredAt||monitoringState.recoveredAt||null,
+    automaticRepairAttempted:false
+  };
+}
+
 export default async request=>{
   try{
     const user=await requireUser(request),url=new URL(request.url),workspace=await requireWorkspace(user.id,url.searchParams.get('id'));
@@ -50,7 +71,8 @@ export default async request=>{
       recoveredAt:state.recoveredAt||null,
       automaticRepairAttempted:false
     }:null;
+    const monitoringIncident=legacyMonitoringIncident(monitoringState);
     const relayOrigin=url.origin,runtimeObserver={workspaceId:workspace.id,scriptUrl:`${relayOrigin}/wr-runtime-agent.js`,beaconUrl:`${relayOrigin}/api/runtime/beacon`,privacy:{formValues:false,responseBodies:false,headers:false,cookies:false,automaticClicks:false,automaticFormSubmissions:false},journeyAttributes:['data-weaverelay-journey','data-weaverelay-step']};
-    return json(200,{ok:true,workspace,connections,monitoringState,runtimeObserver});
+    return json(200,{ok:true,workspace,connections,monitoringState,monitoringIncident,runtimeObserver});
   }catch(error){return safeError(error)}
 };
