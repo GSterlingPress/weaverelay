@@ -44,6 +44,12 @@ export function closestProviderFixLink(provider,evidence={}){
     const zoneId=first(evidence,['zoneId']);
     if(accountId&&zoneId)return{label:'Open exact Cloudflare DNS zone',url:`https://dash.cloudflare.com/${enc(accountId)}/${enc(zoneId)}/dns/records`,depth:'resource'};
   }
+  if(p==='railway'){
+    const projectId=first(evidence,['railwayProjectId','projectId']);
+    const serviceId=first(evidence,['railwayServiceId','serviceId']);
+    if(projectId&&serviceId)return{label:'Open exact Railway service',url:`https://railway.com/project/${enc(projectId)}/service/${enc(serviceId)}`,depth:'resource'};
+    if(projectId)return{label:'Open exact Railway project',url:`https://railway.com/project/${enc(projectId)}`,depth:'resource'};
+  }
   if(p==='supabase'){
     const ref=first(evidence,['projectRef','supabaseProjectRef','projectId']);
     if(ref)return{label:'Open exact Supabase project',url:`https://supabase.com/dashboard/project/${enc(ref)}`,depth:'resource'};
@@ -70,4 +76,17 @@ export function closestProviderFixLink(provider,evidence={}){
     return null;
   }
   return fallback.url?{...fallback,depth:'provider'}:null;
+}
+
+function evidenceForFinding(finding,checks){
+  const out={};
+  for(const id of finding?.evidence||[]){const check=checks.get(id);if(check?.evidence&&typeof check.evidence==='object')Object.assign(out,check.evidence)}
+  return out;
+}
+
+export function applyClosestProviderFixLinks(diagnosis={},snapshot={}){
+  const checks=new Map((snapshot.checks||[]).map(c=>[c.id,c]));
+  for(const finding of diagnosis.findings||[]){if(!finding.provider)continue;const link=closestProviderFixLink(finding.provider,evidenceForFinding(finding,checks));if(link)finding.openProvider=link}
+  diagnosis.safeRepairs=(diagnosis.safeRepairs||[]).map(repair=>{const finding=(diagnosis.findings||[]).find(f=>f.id===repair.finding);return finding?.openProvider?{...repair,openProvider:finding.openProvider}:repair});
+  return diagnosis;
 }
