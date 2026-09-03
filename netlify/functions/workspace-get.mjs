@@ -50,6 +50,7 @@ export default async request=>{
       recoveredAt:state.recoveredAt||null,
       automaticRepairAttempted:false
     }:null;
-    return json(200,{ok:true,workspace,connections,monitoringState});
+    const relayOrigin=url.origin,runtimeObserver={workspaceId:workspace.id,scriptUrl:`${relayOrigin}/wr-runtime-agent.js`,beaconUrl:`${relayOrigin}/api/runtime/beacon`,privacy:{formValues:false,responseBodies:false,headers:false,cookies:false,automaticClicks:false,automaticFormSubmissions:false},journeyAttributes:['data-weaverelay-journey','data-weaverelay-step']};
+    return json(200,{ok:true,workspace,connections,monitoringState,runtimeObserver});
   }catch(error){return safeError(error)}
 };
