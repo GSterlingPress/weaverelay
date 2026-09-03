@@ -10,6 +10,10 @@ const apiKey = process.env.RESEND_API_KEY;
 const to = process.env.WEAVERELAY_ALERT_TO;
 const from = process.env.WEAVERELAY_ALERT_FROM || 'WeaveRelay Monitor <monitor@weaverelay.com>';
 if (!apiKey || !to) {
+  if (process.env.WEAVERELAY_NOTIFICATION_DRY_RUN === '1') {
+    console.log(JSON.stringify({ dryRun: true, type: event.type, idempotencyKey: event.idempotencyKey }, null, 2));
+    process.exit(0);
+  }
   console.error('Notification transition exists, but RESEND_API_KEY or WEAVERELAY_ALERT_TO is missing.');
   process.exit(3);
 }
