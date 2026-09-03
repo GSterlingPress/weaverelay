@@ -1,6 +1,7 @@
 import test from'node:test';import assert from'node:assert/strict';
 import{reconcileEvidence}from'../netlify/functions/_evidence-truth.mjs';
 import{prioritizeDiagnosis}from'../netlify/functions/_diagnosis-priority.mjs';
+import{runtimeCheckFromEvents}from'../netlify/functions/_browser-runtime.mjs';
 const NOW=Date.parse('2026-09-03T18:45:00Z');
 const check=(id,status,source,observedAt,evidence={})=>({id,label:id,status,detail:`${id} ${status}`,evidence:{source,observedAt,...evidence}});
 
@@ -14,6 +15,8 @@ test('two independent similarly strong current sources remain unresolved',()=>{c
 
 test('materially stronger independent evidence can resolve a contradiction without deleting the loser',()=>{const out=reconcileEvidence({checks:[check('strong','FAIL','weaverelay-repair-verification','2026-09-03T18:44:00Z',{claimKey:'runtime-state',claimValue:'broken',independentSource:'runtime-verification'}),check('weak','PASS','client-snapshot','2026-09-03T18:44:00Z',{claimKey:'runtime-state',claimValue:'healthy',independentSource:'client-seed'})]},{now:NOW});assert.equal(out.truthSummary.unresolvedContradictionCount,0);assert.equal(out.checks.find(c=>c.id==='strong').status,'FAIL');assert.equal(out.checks.find(c=>c.id==='weak').status,'WARN')});
 
+test('browser runtime failures keep the event observation time for aging',()=>{const out=runtimeCheckFromEvents([{type:'fetch-failure',url:'https://app.example/api',status:500,receivedAt:'2026-09-03T18:44:00Z'}],{now:NOW});assert.equal(out.status,'FAIL');assert.equal(out.evidence.observedAt,'2026-09-03T18:44:00Z')});
+
 test('unresolved truth conflict outranks configuration-changing repairs',()=>{const snapshot={checks:[{id:'map.railway-supabase',status:'FAIL',evidence:{source:'weaverelay-cross-system'}}]};const diagnosis={findings:[{id:'railway-supabase-mismatch',severity:'critical',title:'Change Supabase',evidence:['map.railway-supabase'],provider:'railway',repair:{supported:true,type:'railway-supabase-url',provider:'railway',approvalRequired:true,label:'FIX'}},{id:'evidence-conflict-unresolved',severity:'high',title:'Sources disagree',evidence:[],repair:{supported:false,approvalRequired:true,label:'VERIFY CONFLICT FIRST'}}]};const out=prioritizeDiagnosis(diagnosis,snapshot);assert.equal(out.primaryFinding.id,'evidence-conflict-unresolved')});
 
-test('live diagnose route passes through truth wrapper and priority engine',async()=>{const{readFile}=await import('node:fs/promises');const toml=await readFile(new URL('../netlify.toml',import.meta.url),'utf8'),wrapper=await readFile(new URL('../netlify/functions/diagnose-workspace-truth.mjs',import.meta.url),'utf8');assert.match(toml,/diagnose-workspace-truth/);assert.match(wrapper,/reconcileEvidence/);assert.match(wrapper,/prioritizeDiagnosis/);assert.match(wrapper,/previousSnapshot/)});
+test('live diagnose route passes through truth wrapper and priority engine',async()=>{const{readFile}=await import('node:fs/promises');const toml=await readFile(new URL('../netlify.toml',import.meta.url),'utf8'),wrapper=await readFile(new URL('../netlify/functions/diagnose-workspace-truth.mjs',import.meta.url),'utf8');assert.match(toml,/diagnose-workspace-truth/);assert.match(wrapper,/reconcileEvidence/);assert.match(wrapper,/prioritizeDiagnosis/);assert.match(wrapper,/previousSnapshot/);assert.match(wrapper,/restorePriorTruth/)});
