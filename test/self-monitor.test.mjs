@@ -47,21 +47,36 @@ test('one transient failed round does not declare an outage', () => {
   const report = buildConfirmedSelfMonitorReport({ first: round(false), second: round(true), confirmationIntervalMs: 20000 });
   assert.equal(report.classification.state, 'TRANSIENT_FAILURE_RECOVERED');
   assert.equal(report.classification.severity, 'warn');
-  assert.equal(report.confirmation.confirmed, false);
+  assert.equal(report.confirmation.outageConfirmed, false);
   assert.equal(report.confirmation.consecutiveFailures, 1);
+  assert.equal(report.confirmation.recoveryConfirmed, false);
 });
 
 test('two consecutive failed rounds confirm sustained outage quickly', () => {
   const report = buildConfirmedSelfMonitorReport({ first: round(false), second: round(false), confirmationIntervalMs: 20000 });
   assert.equal(report.classification.severity, 'critical');
-  assert.equal(report.confirmation.confirmed, true);
+  assert.equal(report.confirmation.outageConfirmed, true);
   assert.equal(report.confirmation.requiredConsecutiveFailures, 2);
   assert.equal(report.confirmation.consecutiveFailures, 2);
 });
 
-test('healthy first round skips incident confirmation', () => {
-  const report = buildConfirmedSelfMonitorReport({ first: round(true), confirmationIntervalMs: 20000 });
+test('two consecutive healthy rounds confirm recovery', () => {
+  const report = buildConfirmedSelfMonitorReport({ first: round(true), second: round(true), confirmationIntervalMs: 20000 });
   assert.equal(report.classification.severity, 'info');
-  assert.equal(report.confirmation.confirmed, false);
-  assert.equal(report.confirmation.consecutiveFailures, 0);
+  assert.equal(report.confirmation.recoveryConfirmed, true);
+  assert.equal(report.confirmation.requiredConsecutiveHealthy, 2);
+  assert.equal(report.confirmation.consecutiveHealthy, 2);
+});
+
+test('healthy then failed confirmation is a recovery bounce, not recovery', () => {
+  const report = buildConfirmedSelfMonitorReport({ first: round(true), second: round(false), confirmationIntervalMs: 20000 });
+  assert.equal(report.confirmation.recoveryConfirmed, false);
+  assert.equal(report.confirmation.consecutiveHealthy, 1);
+  assert.notEqual(report.classification.severity, 'info');
+});
+
+test('one healthy round without confirmation cannot prove recovery', () => {
+  const report = buildConfirmedSelfMonitorReport({ first: round(true), confirmationIntervalMs: 20000 });
+  assert.equal(report.confirmation.recoveryConfirmed, false);
+  assert.equal(report.confirmation.consecutiveHealthy, 1);
 });
