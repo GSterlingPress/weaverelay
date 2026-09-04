@@ -1,10 +1,13 @@
 import fs from 'node:fs';
-import { buildSelfMonitorReport, probeUrl } from '../netlify/functions/_self-monitor-core.mjs';
+import { buildConfirmedSelfMonitorReport, buildSelfMonitorReport, probeUrl } from '../netlify/functions/_self-monitor-core.mjs';
 
 const apexUrl = process.env.WEAVERELAY_APEX_URL || 'https://weaverelay.com/';
 const wwwUrl = process.env.WEAVERELAY_WWW_URL || 'https://www.weaverelay.com/';
 const originUrl = process.env.WEAVERELAY_ORIGIN_URL || '';
 const reportPath = process.env.WEAVERELAY_MONITOR_REPORT_PATH || '.self-monitor-report.json';
+const confirmationDelayMs = Math.max(0, Number(process.env.WEAVERELAY_CONFIRMATION_DELAY_MS || 20000));
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function readNetlifyStatus() {
   try {
@@ -12,7 +15,7 @@ async function readNetlifyStatus() {
       headers: { 'user-agent': 'WeaveRelay-Independent-Self-Monitor/1.0' },
       cache: 'no-store',
     });
-    if (!response.ok) return { netlifyOperational: null, status: response.status };
+    if (!response.ok) return { netlifyOperational: null, status: response.status, observedAt: new Date().toISOString() };
     const body = await response.json();
     const indicator = body?.status?.indicator || 'unknown';
     return {
@@ -26,15 +29,29 @@ async function readNetlifyStatus() {
   }
 }
 
-const [apex, www, origin, providerStatus] = await Promise.all([
-  probeUrl(apexUrl),
-  probeUrl(wwwUrl),
-  originUrl ? probeUrl(originUrl) : Promise.resolve(null),
-  readNetlifyStatus(),
-]);
+async function probeRound() {
+  const [apex, www, origin, providerStatus] = await Promise.all([
+    probeUrl(apexUrl),
+    probeUrl(wwwUrl),
+    originUrl ? probeUrl(originUrl) : Promise.resolve(null),
+    readNetlifyStatus(),
+  ]);
+  return { apex, www, origin, providerStatus };
+}
 
-const report = buildSelfMonitorReport({ apex, www, origin, providerStatus });
+const first = await probeRound();
+const firstReport = buildSelfMonitorReport(first);
+let report;
+
+if (firstReport.classification.severity === 'critical') {
+  if (confirmationDelayMs > 0) await sleep(confirmationDelayMs);
+  const second = await probeRound();
+  report = buildConfirmedSelfMonitorReport({ first, second, confirmationIntervalMs: confirmationDelayMs });
+} else {
+  report = buildConfirmedSelfMonitorReport({ first, confirmationIntervalMs: confirmationDelayMs });
+}
+
 fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
-// Incident/recovery state is evaluated in a separate step so a critical outage
-// can still persist state and send exactly one alert before the workflow fails.
+// Incident/recovery state is evaluated in a separate step so a confirmed critical
+// outage can still persist state and send exactly one alert before the workflow fails.
