@@ -8,8 +8,11 @@ test('workspace detail normalizes legacy provider and diagnosis shapes before re
   const source=read('netlify/functions/workspace-get.mjs');
   assert.match(source,/normalizeProviderList/);
   assert.match(source,/normalizeWorkspaceForUi/);
-  assert.match(source,/Array\.isArray\(workspace\.diagnosis\.findings\)/);
-  assert.match(source,/Array\.isArray\(workspace\.stackMap\.flow\)/);
+  assert.match(source,/normalizeFinding/);
+  assert.match(source,/Array\.isArray\(value\.actions\)/);
+  assert.match(source,/actions:actions\.map\(clean\)\.filter\(Boolean\)/);
+  assert.match(source,/normalizeStackMap/);
+  assert.match(source,/uiContractVersion:2/);
 });
 
 test('workspace open failures are no longer silent',()=>{
@@ -25,4 +28,13 @@ test('hard workspace navigation remains enabled',()=>{
   const nav=read('wr-workspace-navigation.js');
   assert.match(app,/wr-workspace-navigation\.js/);
   assert.match(nav,/location\.assign\(workspaceHref/);
+});
+
+test('both connect website controls have an independent resilient click path',()=>{
+  const app=read('app.html');
+  const controls=read('wr-dashboard-controls.js');
+  assert.match(app,/wr-dashboard-controls\.js/);
+  assert.match(controls,/#newWorkspace,#emptyCreate/);
+  assert.match(controls,/classList\.remove\('hidden'\)/);
+  assert.ok(app.indexOf('/wr-dashboard-controls.js')<app.indexOf('/wr-control.js'));
 });
