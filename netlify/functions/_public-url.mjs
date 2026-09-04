@@ -2,6 +2,7 @@ import dns from 'node:dns/promises';
 import net from 'node:net';
 
 const clean=v=>String(v??'').trim();
+const hostText=v=>clean(v).toLowerCase().replace(/^\[|\]$/g,'');
 const blockedHostnames=new Set(['localhost','localhost.localdomain','metadata.google.internal','metadata','169.254.169.254','100.100.100.200']);
 
 function privateV4(ip){
@@ -10,23 +11,22 @@ function privateV4(ip){
   return a===0||a===10||a===127||(a===100&&b>=64&&b<=127)||(a===169&&b===254)||(a===172&&b>=16&&b<=31)||(a===192&&b===0)||(a===192&&b===168)||(a===198&&(b===18||b===19))||a>=224;
 }
 function privateV6(ip){
-  const value=ip.toLowerCase();
+  const value=hostText(ip);
   if(value==='::'||value==='::1')return true;
   if(value.startsWith('fc')||value.startsWith('fd')||/^fe[89ab]/.test(value))return true;
   if(value.startsWith('2001:db8:'))return true;
   const mapped=value.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);return mapped?privateV4(mapped[1]):false;
 }
-export function isPrivateAddress(ip){const kind=net.isIP(ip);return kind===4?privateV4(ip):kind===6?privateV6(ip):true;}
+export function isPrivateAddress(ip){const value=hostText(ip),kind=net.isIP(value);return kind===4?privateV4(value):kind===6?privateV6(value):true;}
 export function normalizePublicOrigin(value,{allowLocalDev=false}={}){
-  const u=new URL(clean(value));
-  const dev=allowLocalDev&&['localhost','127.0.0.1','::1'].includes(u.hostname);
+  const u=new URL(clean(value)),host=hostText(u.hostname);
+  const dev=allowLocalDev&&['localhost','127.0.0.1','::1'].includes(host);
   if((u.protocol!=='https:'&&!dev)||u.username||u.password)throw new Error('Enter a valid public HTTPS site URL.');
-  const host=u.hostname.toLowerCase();
-  if(!dev&&(blockedHostnames.has(host)||host.endsWith('.localhost')||host.endsWith('.local')||net.isIP(host)&&isPrivateAddress(host)))throw new Error('Enter a public HTTPS site URL, not a private or local address.');
+  if(!dev&&(blockedHostnames.has(host)||host.endsWith('.localhost')||host.endsWith('.local')||(net.isIP(host)&&isPrivateAddress(host))))throw new Error('Enter a public HTTPS site URL, not a private or local address.');
   return u.origin;
 }
 export async function assertPublicUrl(value,{allowLocalDev=false}={}){
-  const origin=normalizePublicOrigin(value,{allowLocalDev}),u=new URL(value,origin),host=u.hostname.toLowerCase();
+  const origin=normalizePublicOrigin(value,{allowLocalDev}),u=new URL(value,origin),host=hostText(u.hostname);
   if(allowLocalDev&&['localhost','127.0.0.1','::1'].includes(host))return u;
   if(net.isIP(host)){if(isPrivateAddress(host))throw new Error('Private network destinations are not allowed.');return u;}
   let records=[];try{records=await dns.lookup(host,{all:true,verbatim:true})}catch{throw new Error('The website hostname could not be resolved safely.');}
