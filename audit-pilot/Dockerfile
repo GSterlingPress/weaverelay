@@ -8,7 +8,9 @@ RUN cat /tmp/runtime/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz \
  && tar -xJf /tmp/audit-runtime.tar.xz -C /app \
  && test -f /app/app.py \
  && rm -rf /tmp/runtime /tmp/audit-runtime.tar.xz
-RUN pip install --no-cache-dir -r requirements.txt \
+COPY app.py /app/app.py
+RUN python -m py_compile /app/app.py \
+ && pip install --no-cache-dir -r requirements.txt \
  && useradd --create-home --uid 10001 audituser \
  && mkdir -p /tmp/contract-money-audit-jobs \
  && chown -R audituser:audituser /app /tmp/contract-money-audit-jobs
