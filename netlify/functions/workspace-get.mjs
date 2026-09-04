@@ -1,9 +1,9 @@
-import { getStore } from '@netlify/blobs';
 import{requireUser}from'./_auth.mjs';
 import{requireWorkspace,readConnection}from'./_workspace-store.mjs';
+import{scopedStore}from'./_scoped-store.mjs';
 import{json,safeError}from'./_http.mjs';
 
-const monitorStore=()=>getStore({name:'weaverelay-monitoring',consistency:'strong'});
+const monitorStore=()=>scopedStore('weaverelay-monitoring');
 const clean=v=>String(v??'').trim();
 
 function safeIncident(value){
@@ -56,10 +56,12 @@ export default async request=>{
     const user=await requireUser(request),url=new URL(request.url),workspace=await requireWorkspace(user.id,url.searchParams.get('id'));
     const connections={};
     for(const p of workspace.providers||[]){
+      if(!p||typeof p!=='object'||!p.id)continue;
       const c=await readConnection(workspace.id,p.id).catch(()=>null);
       if(c)connections[p.id]={status:c.status,externalAccountName:c.externalAccountName||null,scopes:c.scopes||[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:c.lastErrorCode||null};
     }
-    const state=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'}).catch(()=>null);
+    let state=null;
+    try{state=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'});}catch{}
     const monitoringState=state?{
       status:clean(state.status).slice(0,30)||'unknown',
       lastCheckedAt:state.lastCheckedAt||null,
