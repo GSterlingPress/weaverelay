@@ -22,14 +22,16 @@ test('production control-plane assets cannot remain stale',()=>{
   assert.match(toml,/Strict-Transport-Security = "max-age=31536000"/);
 });
 
-test('workspace creation and monitoring both use public-network safety gates',()=>{
+test('workspace creation, monitoring and diagnostics all use public-network safety gates',()=>{
   const create=fs.readFileSync(new URL('../netlify/functions/workspace-create.mjs',import.meta.url),'utf8');
   const monitor=fs.readFileSync(new URL('../netlify/functions/_monitoring.mjs',import.meta.url),'utf8');
-  assert.match(create,/normalizePublicOrigin/);assert.match(monitor,/publicFetch/);
+  const diagnostics=fs.readFileSync(new URL('../netlify/functions/_website-diagnostics.mjs',import.meta.url),'utf8');
+  assert.match(create,/normalizePublicOrigin/);assert.match(monitor,/publicFetch/);assert.match(diagnostics,/publicFetch/);
 });
 
 test('passwordless login is rate limited and production blob state is scoped',()=>{
   const auth=fs.readFileSync(new URL('../netlify/functions/auth-request.mjs',import.meta.url),'utf8');
   const workspace=fs.readFileSync(new URL('../netlify/functions/_workspace-store.mjs',import.meta.url),'utf8');
-  assert.match(auth,/enforceAuthRequestLimit/);assert.match(workspace,/scopedStore\('weaverelay-control-plane'\)/);
+  const relay=fs.readFileSync(new URL('../netlify/functions/_relay-store.mjs',import.meta.url),'utf8');
+  assert.match(auth,/enforceAuthRequestLimit/);assert.match(workspace,/scopedStore\('weaverelay-control-plane'\)/);assert.match(relay,/scopedStore\(name\)/);
 });
