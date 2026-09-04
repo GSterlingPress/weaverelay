@@ -20,17 +20,28 @@ function normalizeProviderList(value){
   return out;
 }
 
+function normalizeFinding(value){
+  if(!value||typeof value!=='object')return null;
+  const actions=Array.isArray(value.actions)?value.actions:(value.actions==null?[]:[value.actions]);
+  return{
+    ...value,
+    actions:actions.map(clean).filter(Boolean),
+    repair:value.repair&&typeof value.repair==='object'?value.repair:{},
+    openProvider:value.openProvider&&typeof value.openProvider==='object'?value.openProvider:null
+  };
+}
+
 function normalizeWorkspaceForUi(workspace){
   const providers=normalizeProviderList(workspace.providers);
   const diagnosis=workspace.diagnosis&&typeof workspace.diagnosis==='object'?{
     ...workspace.diagnosis,
-    findings:Array.isArray(workspace.diagnosis.findings)?workspace.diagnosis.findings.filter(Boolean):[],
+    findings:Array.isArray(workspace.diagnosis.findings)?workspace.diagnosis.findings.map(normalizeFinding).filter(Boolean):[],
     checks:Array.isArray(workspace.diagnosis.checks)?workspace.diagnosis.checks.filter(Boolean):[]
   }:null;
   const stackMap=workspace.stackMap&&typeof workspace.stackMap==='object'?{
     ...workspace.stackMap,
     nodes:Array.isArray(workspace.stackMap.nodes)?workspace.stackMap.nodes.filter(Boolean):[],
-    flow:Array.isArray(workspace.stackMap.flow)?workspace.stackMap.flow.map(clean).filter(Boolean):[]
+    flow:Array.isArray(workspace.stackMap.flow)?workspace.stackMap.flow.map(item=>clean(item&&typeof item==='object'?(item.label||item.name||item.id):item)).filter(Boolean):[]
   }:{nodes:[],flow:[]};
   return{...workspace,providers,diagnosis,stackMap};
 }
