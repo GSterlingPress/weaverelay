@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { publicFetch } from './_public-url.mjs';
 
 export const MONITOR_DEFAULTS=Object.freeze({
   enabled:false,
@@ -35,17 +36,17 @@ export function isMonitorDue(previous={},monitoringInput={},now=Date.now()){
 export async function probePublicSite(siteOrigin,{fetchImpl=fetch,timeoutMs=8000}={}){
   const origin=clean(siteOrigin);
   if(!origin)return{status:'skipped',detail:'No production URL is configured for this workspace.',httpStatus:null,checkedAt:new Date().toISOString()};
-  let url;
-  try{url=new URL(origin);if(url.protocol!=='https:'&&!['localhost','127.0.0.1'].includes(url.hostname))throw new Error();}catch{return{status:'attention',detail:'The configured production URL is invalid.',httpStatus:null,checkedAt:new Date().toISOString()};}
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
-    const response=await fetchImpl(url.origin,{method:'GET',redirect:'follow',headers:{'user-agent':'WeaveRelay-Monitor/1.0','cache-control':'no-cache'},signal:controller.signal});
+    const response=await publicFetch(origin,{method:'GET',headers:{'user-agent':'WeaveRelay-Monitor/1.0','cache-control':'no-cache'},signal:controller.signal},{fetchImpl,allowLocalDev:false});
     await response.body?.cancel?.().catch?.(()=>{});
     const httpStatus=response.status;
     if(httpStatus>=200&&httpStatus<400)return{status:'healthy',detail:`The production site answered HTTP ${httpStatus}.`,httpStatus,checkedAt:new Date().toISOString()};
     if(httpStatus>=500)return{status:'broken',detail:`The production site answered HTTP ${httpStatus}.`,httpStatus,checkedAt:new Date().toISOString()};
     return{status:'attention',detail:`The production site answered HTTP ${httpStatus}.`,httpStatus,checkedAt:new Date().toISOString()};
   }catch(error){
+    const message=String(error?.message||'');
+    if(/private network|public https|hostname could not be resolved safely/i.test(message))return{status:'attention',detail:'The configured production URL failed WeaveRelay public-network safety validation.',httpStatus:null,checkedAt:new Date().toISOString()};
     return{status:'broken',detail:error?.name==='AbortError'?'The production site timed out.':'The production site could not be reached.',httpStatus:null,checkedAt:new Date().toISOString()};
   }finally{clearTimeout(timer)}
 }
