@@ -80,16 +80,23 @@ export function topDiagnostic(diagnosis){
   return finding?{title:clean(finding.title).slice(0,180),explanation:clean(finding.explanation).slice(0,500),severity:clean(finding.severity).slice(0,30)}:null;
 }
 
+function incidentMessage(app,observation={}){
+  if(observation.incidentKind==='critical-dependency')return{subject:`WeaveRelay alert: ${app} loads, but its backend is failing`,headline:`${app} loads, but its backend is failing`};
+  if(observation.incidentKind==='business-function')return{subject:`WeaveRelay alert: ${app} loads, but a critical function is broken`,headline:`${app} loads, but a critical function is broken`};
+  return{subject:`WeaveRelay alert: ${app} may be down`,headline:`${app} may be down`};
+}
+
 export function buildOutageEmail({workspace,observation,diagnosis,checkedAt=new Date().toISOString()}){
-  const app=clean(workspace?.name)||'Your app',finding=topDiagnostic(diagnosis);
-  const subject=`WeaveRelay alert: ${app} may be down`;
-  const detail=finding?`${finding.title}. ${finding.explanation}`:clean(observation?.detail)||'WeaveRelay could not reach the production site.';
-  const text=[`${app} may be down.`,`Checked: ${checkedAt}`,clean(observation?.detail),finding?`Diagnosis: ${detail}`:'Diagnosis: WeaveRelay did not find enough evidence for a safe automatic repair.',`Automatic repair: not attempted unless this workspace has a separately approved, proven-safe repair policy.`,`Open WeaveRelay: https://weaverelay.com/app.html`].filter(Boolean).join('\n\n');
-  const html=`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:28px;color:#17211d"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#66756f">WEAVERELAY MONITOR</div><h1 style="font-size:26px">${esc(app)} may be down</h1><p>${esc(observation?.detail||'WeaveRelay could not reach the production site.')}</p>${finding?`<p><strong>Diagnosis:</strong> ${esc(detail)}</p>`:'<p><strong>Diagnosis:</strong> WeaveRelay did not find enough evidence for a safe automatic repair.</p>'}<p><strong>Automatic repair:</strong> not attempted unless this workspace has a separately approved, proven-safe repair policy.</p><p><a href="https://weaverelay.com/app.html">Open WeaveRelay</a></p><p style="font-size:12px;color:#66756f">Checked ${esc(checkedAt)}</p></div>`;
-  return{subject,text,html};
+  const app=clean(workspace?.name)||'Your app',finding=topDiagnostic(diagnosis),message=incidentMessage(app,observation);
+  const detail=finding?`${finding.title}. ${finding.explanation}`:clean(observation?.detail)||'WeaveRelay found a production-health problem.';
+  const text=[message.headline,`Checked: ${checkedAt}`,clean(observation?.detail),finding?`Diagnosis: ${detail}`:'Diagnosis: WeaveRelay did not find enough evidence for a safe automatic repair.',`Automatic repair: not attempted unless this workspace has a separately approved, proven-safe repair policy.`,`Open WeaveRelay: https://weaverelay.com/app.html`].filter(Boolean).join('\n\n');
+  const html=`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:28px;color:#17211d"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#66756f">WEAVERELAY MONITOR</div><h1 style="font-size:26px">${esc(message.headline)}</h1><p>${esc(observation?.detail||'WeaveRelay found a production-health problem.')}</p>${finding?`<p><strong>Diagnosis:</strong> ${esc(detail)}</p>`:'<p><strong>Diagnosis:</strong> WeaveRelay did not find enough evidence for a safe automatic repair.</p>'}<p><strong>Automatic repair:</strong> not attempted unless this workspace has a separately approved, proven-safe repair policy.</p><p><a href="https://weaverelay.com/app.html">Open WeaveRelay</a></p><p style="font-size:12px;color:#66756f">Checked ${esc(checkedAt)}</p></div>`;
+  return{subject:message.subject,text,html};
 }
 
 export function buildRecoveryEmail({workspace,observation,checkedAt=new Date().toISOString()}){
   const app=clean(workspace?.name)||'Your app';
-  return{subject:`WeaveRelay recovery: ${app} is responding again`,text:`${app} is responding again.\n\n${clean(observation?.detail)}\n\nChecked: ${checkedAt}\n\nOpen WeaveRelay: https://weaverelay.com/app.html`,html:`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:28px;color:#17211d"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#66756f">WEAVERELAY RECOVERY</div><h1 style="font-size:26px">${esc(app)} is responding again</h1><p>${esc(observation?.detail||'The production site is reachable again.')}</p><p><a href="https://weaverelay.com/app.html">Open WeaveRelay</a></p><p style="font-size:12px;color:#66756f">Checked ${esc(checkedAt)}</p></div>`};
+  const functional=observation?.incidentKind==='critical-dependency'||observation?.incidentKind==='business-function';
+  const headline=functional?`${app}'s monitored function is healthy again`:`${app} is responding again`;
+  return{subject:`WeaveRelay recovery: ${headline}`,text:`${headline}.\n\n${clean(observation?.detail)}\n\nChecked: ${checkedAt}\n\nOpen WeaveRelay: https://weaverelay.com/app.html`,html:`<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;padding:28px;color:#17211d"><div style="font-size:12px;font-weight:700;letter-spacing:.08em;color:#66756f">WEAVERELAY RECOVERY</div><h1 style="font-size:26px">${esc(headline)}</h1><p>${esc(observation?.detail||'The monitored production path is healthy again.')}</p><p><a href="https://weaverelay.com/app.html">Open WeaveRelay</a></p><p style="font-size:12px;color:#66756f">Checked ${esc(checkedAt)}</p></div>`};
 }

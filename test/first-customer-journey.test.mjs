@@ -1,0 +1,7 @@
+import test from'node:test';import assert from'node:assert/strict';import{readFile}from'node:fs/promises';
+const read=p=>readFile(new URL(`../${p}`,import.meta.url),'utf8');
+test('sign-in page offers recovery for missing expired or used links',async()=>{const html=await read('signin.html');assert.match(html,/Request a fresh sign-in link/);assert.match(html,/if\(!t\)/);assert.match(html,/recovery\.classList\.remove/)});
+test('manual first app requires a production website URL',async()=>{const html=await read('app.html');assert.match(html,/Production website URL/);assert.match(html,/id="newOrigin" type="url" required/);assert.match(html,/wr-first-use-guide\.js/)});
+test('first-use guide advances through connection diagnosis and monitoring',async()=>{const js=await read('wr-first-use-guide.js');for(const text of['Start with one service','RUN MY FIRST DIAGNOSIS','Diagnosis is working','First setup complete','provider:'])assert.match(js,new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')))});
+test('monitoring cannot claim ON without a production site origin',async()=>{const src=await read('netlify/functions/workspace-monitoring.mjs');assert.match(src,/monitoring\.enabled&&!workspace\.siteOrigin/);assert.match(src,/before turning monitoring on/)});
+test('provider OAuth result is one-time visible and has safe retry guidance',async()=>{const js=await read('wr-oauth-result.js');assert.match(js,/history\.replaceState/);assert.match(js,/safely retry/);assert.match(js,/will not replace an existing working authorization/);assert.match(js,/CONNECTION RESULT/)});

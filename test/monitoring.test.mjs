@@ -49,6 +49,24 @@ test('outage email states that automatic repair was not silently attempted',()=>
   assert.match(mail.text,/Railway connection is failing/);
 });
 
+test('functional backend incident email does not falsely say the whole site is down',()=>{
+  const mail=buildOutageEmail({workspace:{name:'Studio One'},observation:{incidentKind:'critical-dependency',detail:'The website loads, but Railway → Supabase is failing.'},diagnosis:null,checkedAt:'2026-09-02T19:05:00.000Z'});
+  assert.match(mail.subject,/loads, but its backend is failing/i);
+  assert.doesNotMatch(mail.subject,/may be down/i);
+  assert.match(mail.text,/website loads/i);
+});
+
+test('business-function incident email identifies a broken function',()=>{
+  const mail=buildOutageEmail({workspace:{name:'Studio One'},observation:{incidentKind:'business-function',detail:'The website loads, but ComfyUI is unhealthy.'},diagnosis:null,checkedAt:'2026-09-02T19:05:00.000Z'});
+  assert.match(mail.subject,/critical function is broken/i);
+});
+
+test('functional recovery email says the monitored function recovered',()=>{
+  const mail=buildRecoveryEmail({workspace:{name:'Studio One'},observation:{incidentKind:'critical-dependency',detail:'The backend path is healthy again.'},checkedAt:'2026-09-02T19:15:00.000Z'});
+  assert.match(mail.subject,/monitored function is healthy again/i);
+  assert.match(mail.text,/healthy again/i);
+});
+
 test('recovery email is explicit',()=>{
   const mail=buildRecoveryEmail({workspace:{name:'Studio One'},observation:{detail:'The production site answered HTTP 200.'},checkedAt:'2026-09-02T19:15:00.000Z'});
   assert.match(mail.subject,/recovery/i);
