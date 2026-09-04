@@ -9,7 +9,8 @@ test('workspace detail normalizes legacy provider and diagnosis shapes before re
   assert.match(source,/normalizeProviderList/);
   assert.match(source,/normalizeWorkspaceForUi/);
   assert.match(source,/normalizeFinding/);
-  assert.match(source,/normalizeStackMap/);
+  assert.match(source,/Array\.isArray\(value\.actions\)/);
+  assert.match(source,/workspace\.stackMap\.flow/);
 });
 
 test('workspace open failures are no longer silent',()=>{
