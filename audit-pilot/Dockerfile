@@ -3,7 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=8080
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils xz-utils ca-certificates coreutils && rm -rf /var/lib/apt/lists/*
 COPY bundle.00 bundle.01 bundle.02 bundle.03 bundle.04 bundle.05 bundle.06 /tmp/bundle/
-RUN cat /tmp/bundle/bundle.* | base64 --decode --ignore-garbage > /tmp/audit-runtime.tar.xz \
+RUN for f in /tmp/bundle/bundle.*; do base64 --decode "$f"; done > /tmp/audit-runtime.tar.xz \
  && xz --test /tmp/audit-runtime.tar.xz \
  && tar -xJf /tmp/audit-runtime.tar.xz -C /app \
  && test -f /app/app.py \
