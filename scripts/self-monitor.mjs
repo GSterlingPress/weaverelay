@@ -40,16 +40,9 @@ async function probeRound() {
 }
 
 const first = await probeRound();
-const firstReport = buildSelfMonitorReport(first);
-let report;
-
-if (firstReport.classification.severity === 'critical') {
-  if (confirmationDelayMs > 0) await sleep(confirmationDelayMs);
-  const second = await probeRound();
-  report = buildConfirmedSelfMonitorReport({ first, second, confirmationIntervalMs: confirmationDelayMs });
-} else {
-  report = buildConfirmedSelfMonitorReport({ first, confirmationIntervalMs: confirmationDelayMs });
-}
+if (confirmationDelayMs > 0) await sleep(confirmationDelayMs);
+const second = await probeRound();
+const report = buildConfirmedSelfMonitorReport({ first, second, confirmationIntervalMs: confirmationDelayMs });
 
 fs.writeFileSync(reportPath, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report, null, 2));
