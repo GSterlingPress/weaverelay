@@ -13,6 +13,7 @@ export default async request=>{
       ...(workspace.monitoring||{}),
       ...(body.monitoring&&typeof body.monitoring==='object'?body.monitoring:{})
     });
+    if(monitoring.enabled&&!workspace.siteOrigin)return json(409,{ok:false,error:'Add this app’s production website URL before turning monitoring on.'});
     workspace.monitoring={...monitoring,alertTarget:'verified-owner-email',updatedAt:new Date().toISOString()};
     workspace.updatedAt=new Date().toISOString();
     await writeWorkspace(workspace);

@@ -49,6 +49,26 @@
   from = "/api/workspace/claim-client"
   to = "/.netlify/functions/workspace-claim-client"
   status = 200
+[[redirects]]
+  from = "/api/workspace/monitoring"
+  to = "/.netlify/functions/workspace-monitoring"
+  status = 200
+
+# Privacy-safe browser runtime telemetry from an authorized customer site
+[[redirects]]
+  from = "/api/runtime/beacon"
+  to = "/.netlify/functions/runtime-beacon"
+  status = 200
+
+# Explicitly approved, non-destructive synthetic browser journeys
+[[redirects]]
+  from = "/api/synthetic/journey"
+  to = "/.netlify/functions/synthetic-journey-config"
+  status = 200
+[[redirects]]
+  from = "/api/synthetic/run"
+  to = "/.netlify/functions/synthetic-journey-run"
+  status = 200
 
 # Provider authorization + diagnostics
 [[redirects]]
@@ -89,7 +109,7 @@
   status = 200
 [[redirects]]
   from = "/api/diagnose"
-  to = "/.netlify/functions/diagnose-workspace-expanded"
+  to = "/.netlify/functions/diagnose-workspace-truth"
   status = 200
 
 # RunPod controls — exact reviewed Pods only; stopping requires explicit approval
@@ -151,11 +171,23 @@
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
     Content-Security-Policy = "default-src 'self'; connect-src 'self' https://github.com https://api.github.com; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://github.com"
 
+# Human-friendly application entry points.
+[[redirects]]
+  from = "/login"
+  to = "/app.html"
+  status = 200
+[[redirects]]
+  from = "/dashboard"
+  to = "/app.html"
+  status = 200
+[[redirects]]
+  from = "/connect"
+  to = "/app.html"
+  status = 200
 [[redirects]]
   from = "/app"
   to = "/app.html"
   status = 200
-
 [[redirects]]
   from = "/app/"
   to = "/app.html"
