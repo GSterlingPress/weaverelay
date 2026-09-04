@@ -1,10 +1,39 @@
 import{requireUser}from'./_auth.mjs';
 import{requireWorkspace,readConnection}from'./_workspace-store.mjs';
+import{PROVIDERS}from'./_provider-catalog.mjs';
 import{scopedStore}from'./_scoped-store.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const monitorStore=()=>scopedStore('weaverelay-monitoring');
 const clean=v=>String(v??'').trim();
+
+function normalizeProviderList(value){
+  const raw=Array.isArray(value)?value:(value&&typeof value==='object'?Object.entries(value).map(([id,item])=>item&&typeof item==='object'?{id,...item}:id):[]);
+  const seen=new Set(),out=[];
+  for(const item of raw){
+    const id=clean(item&&typeof item==='object'?item.id:item).toLowerCase();
+    if(!id||seen.has(id)||!PROVIDERS[id])continue;
+    seen.add(id);
+    const record=item&&typeof item==='object'?item:{};
+    out.push({id,label:clean(record.label)||PROVIDERS[id].label,category:clean(record.category)||PROVIDERS[id].category,authorization:clean(record.authorization)||PROVIDERS[id].authorization,purpose:clean(record.purpose)||PROVIDERS[id].purpose,status:clean(record.status)||'not_connected',detail:clean(record.detail),checkedAt:record.checkedAt||null});
+  }
+  return out;
+}
+
+function normalizeWorkspaceForUi(workspace){
+  const providers=normalizeProviderList(workspace.providers);
+  const diagnosis=workspace.diagnosis&&typeof workspace.diagnosis==='object'?{
+    ...workspace.diagnosis,
+    findings:Array.isArray(workspace.diagnosis.findings)?workspace.diagnosis.findings.filter(Boolean):[],
+    checks:Array.isArray(workspace.diagnosis.checks)?workspace.diagnosis.checks.filter(Boolean):[]
+  }:null;
+  const stackMap=workspace.stackMap&&typeof workspace.stackMap==='object'?{
+    ...workspace.stackMap,
+    nodes:Array.isArray(workspace.stackMap.nodes)?workspace.stackMap.nodes.filter(Boolean):[],
+    flow:Array.isArray(workspace.stackMap.flow)?workspace.stackMap.flow.map(clean).filter(Boolean):[]
+  }:{nodes:[],flow:[]};
+  return{...workspace,providers,diagnosis,stackMap};
+}
 
 function safeIncident(value){
   if(!value||typeof value!=='object')return null;
@@ -53,12 +82,11 @@ function legacyMonitoringIncident(monitoringState){
 
 export default async request=>{
   try{
-    const user=await requireUser(request),url=new URL(request.url),workspace=await requireWorkspace(user.id,url.searchParams.get('id'));
+    const user=await requireUser(request),url=new URL(request.url),storedWorkspace=await requireWorkspace(user.id,url.searchParams.get('id')),workspace=normalizeWorkspaceForUi(storedWorkspace);
     const connections={};
-    for(const p of workspace.providers||[]){
-      if(!p||typeof p!=='object'||!p.id)continue;
+    for(const p of workspace.providers){
       const c=await readConnection(workspace.id,p.id).catch(()=>null);
-      if(c)connections[p.id]={status:c.status,externalAccountName:c.externalAccountName||null,scopes:c.scopes||[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:c.lastErrorCode||null};
+      if(c)connections[p.id]={status:c.status,externalAccountName:c.externalAccountName||null,scopes:Array.isArray(c.scopes)?c.scopes:[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:c.lastErrorCode||null};
     }
     let state=null;
     try{state=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'});}catch{}
