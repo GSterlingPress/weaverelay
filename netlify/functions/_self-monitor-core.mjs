@@ -14,6 +14,10 @@ function failed(result = {}) {
   return result.error || statusOf(result) >= 400 || statusOf(result) === 0;
 }
 
+function publicHealthy(round = {}) {
+  return ok(round.apex) && ok(round.www);
+}
+
 export async function probeUrl(url, { fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const observedAt = new Date().toISOString();
   const controller = new AbortController();
@@ -129,39 +133,92 @@ export function buildSelfMonitorReport({ apex, www, origin, providerStatus } = {
 
 export function buildConfirmedSelfMonitorReport({ first, second, confirmationIntervalMs = 0 } = {}) {
   const firstReport = buildSelfMonitorReport(first || {});
+  const secondReport = second ? buildSelfMonitorReport(second) : null;
   const firstCritical = firstReport.classification.severity === 'critical';
+  const secondCritical = secondReport?.classification?.severity === 'critical';
+  const firstHealthy = publicHealthy(first || {});
+  const secondHealthy = second ? publicHealthy(second) : false;
 
-  if (!firstCritical) {
+  if (firstCritical) {
+    if (!secondReport || !secondCritical) {
+      return {
+        ...(secondReport || firstReport),
+        classification: {
+          state: 'TRANSIENT_FAILURE_RECOVERED',
+          severity: 'warn',
+          repairClass: 'none',
+          safeAutoRepair: false,
+          reason: 'The first probe failed, but the immediate independent confirmation probe recovered.',
+          nextProof: 'Keep monitoring. Do not open an incident or mutate production from a single transient failure.',
+        },
+        confirmation: {
+          requiredConsecutiveFailures: 2,
+          consecutiveFailures: 1,
+          outageConfirmed: false,
+          requiredConsecutiveHealthy: 2,
+          consecutiveHealthy: secondHealthy ? 1 : 0,
+          recoveryConfirmed: false,
+          confirmationIntervalMs,
+          firstClassification: firstReport.classification.state,
+          secondClassification: secondReport?.classification?.state || null,
+        },
+      };
+    }
+
     return {
-      ...firstReport,
+      ...secondReport,
       confirmation: {
         requiredConsecutiveFailures: 2,
-        consecutiveFailures: 0,
-        confirmed: false,
+        consecutiveFailures: 2,
+        outageConfirmed: true,
+        requiredConsecutiveHealthy: 2,
+        consecutiveHealthy: 0,
+        recoveryConfirmed: false,
         confirmationIntervalMs,
-        reason: 'No confirmation probe was needed because the first probe was not a full outage.',
+        firstClassification: firstReport.classification.state,
+        secondClassification: secondReport.classification.state,
+        rule: 'An outage is declared only after two consecutive independent probe rounds fail.',
       },
     };
   }
 
-  const secondReport = buildSelfMonitorReport(second || {});
-  const secondCritical = secondReport.classification.severity === 'critical';
+  if (firstHealthy && secondHealthy) {
+    return {
+      ...secondReport,
+      confirmation: {
+        requiredConsecutiveFailures: 2,
+        consecutiveFailures: 0,
+        outageConfirmed: false,
+        requiredConsecutiveHealthy: 2,
+        consecutiveHealthy: 2,
+        recoveryConfirmed: true,
+        confirmationIntervalMs,
+        firstClassification: firstReport.classification.state,
+        secondClassification: secondReport.classification.state,
+        rule: 'Recovery is announced only after two consecutive independent probe rounds confirm both apex and www are healthy.',
+      },
+    };
+  }
 
-  if (!secondCritical) {
+  if (firstHealthy && secondReport && !secondHealthy) {
     return {
       ...secondReport,
       classification: {
-        state: 'TRANSIENT_FAILURE_RECOVERED',
-        severity: 'warn',
-        repairClass: 'none',
-        safeAutoRepair: false,
-        reason: 'The first probe failed, but the immediate independent confirmation probe recovered.',
-        nextProof: 'Keep monitoring. Do not open an incident or mutate production from a single transient failure.',
+        ...secondReport.classification,
+        state: secondCritical ? secondReport.classification.state : 'RECOVERY_BOUNCE_DETECTED',
+        severity: secondCritical ? 'critical' : 'warn',
+        reason: secondCritical
+          ? secondReport.classification.reason
+          : 'The first recovery probe passed, but the confirmation probe did not keep both public hostnames healthy.',
+        nextProof: 'Keep the incident open and require two fresh consecutive healthy rounds before announcing recovery.',
       },
       confirmation: {
         requiredConsecutiveFailures: 2,
-        consecutiveFailures: 1,
-        confirmed: false,
+        consecutiveFailures: secondCritical ? 1 : 0,
+        outageConfirmed: false,
+        requiredConsecutiveHealthy: 2,
+        consecutiveHealthy: 1,
+        recoveryConfirmed: false,
         confirmationIntervalMs,
         firstClassification: firstReport.classification.state,
         secondClassification: secondReport.classification.state,
@@ -170,15 +227,16 @@ export function buildConfirmedSelfMonitorReport({ first, second, confirmationInt
   }
 
   return {
-    ...secondReport,
+    ...firstReport,
     confirmation: {
       requiredConsecutiveFailures: 2,
-      consecutiveFailures: 2,
-      confirmed: true,
+      consecutiveFailures: 0,
+      outageConfirmed: false,
+      requiredConsecutiveHealthy: 2,
+      consecutiveHealthy: firstHealthy ? 1 : 0,
+      recoveryConfirmed: false,
       confirmationIntervalMs,
-      firstClassification: firstReport.classification.state,
-      secondClassification: secondReport.classification.state,
-      rule: 'An outage is declared only after two consecutive independent probe rounds fail.',
+      reason: secondReport ? 'Both public hostnames were not healthy in both rounds.' : 'A confirmation probe is still required.',
     },
   };
 }
