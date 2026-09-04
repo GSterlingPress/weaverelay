@@ -126,3 +126,59 @@ export function buildSelfMonitorReport({ apex, www, origin, providerStatus } = {
     },
   };
 }
+
+export function buildConfirmedSelfMonitorReport({ first, second, confirmationIntervalMs = 0 } = {}) {
+  const firstReport = buildSelfMonitorReport(first || {});
+  const firstCritical = firstReport.classification.severity === 'critical';
+
+  if (!firstCritical) {
+    return {
+      ...firstReport,
+      confirmation: {
+        requiredConsecutiveFailures: 2,
+        consecutiveFailures: 0,
+        confirmed: false,
+        confirmationIntervalMs,
+        reason: 'No confirmation probe was needed because the first probe was not a full outage.',
+      },
+    };
+  }
+
+  const secondReport = buildSelfMonitorReport(second || {});
+  const secondCritical = secondReport.classification.severity === 'critical';
+
+  if (!secondCritical) {
+    return {
+      ...secondReport,
+      classification: {
+        state: 'TRANSIENT_FAILURE_RECOVERED',
+        severity: 'warn',
+        repairClass: 'none',
+        safeAutoRepair: false,
+        reason: 'The first probe failed, but the immediate independent confirmation probe recovered.',
+        nextProof: 'Keep monitoring. Do not open an incident or mutate production from a single transient failure.',
+      },
+      confirmation: {
+        requiredConsecutiveFailures: 2,
+        consecutiveFailures: 1,
+        confirmed: false,
+        confirmationIntervalMs,
+        firstClassification: firstReport.classification.state,
+        secondClassification: secondReport.classification.state,
+      },
+    };
+  }
+
+  return {
+    ...secondReport,
+    confirmation: {
+      requiredConsecutiveFailures: 2,
+      consecutiveFailures: 2,
+      confirmed: true,
+      confirmationIntervalMs,
+      firstClassification: firstReport.classification.state,
+      secondClassification: secondReport.classification.state,
+      rule: 'An outage is declared only after two consecutive independent probe rounds fail.',
+    },
+  };
+}
