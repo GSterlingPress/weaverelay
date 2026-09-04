@@ -42,9 +42,10 @@ test('not-connected provider cards are never interpreted as connected',()=>{
 test('diagnosis and monitoring remain reachable after provider connection',()=>{
   const toml=read('netlify.toml');
   const monitoring=read('netlify/functions/workspace-monitoring.mjs');
+  const monitoringUi=read('wr-monitoring-controls.js');
   assert.match(toml,/from = "\/api\/diagnose"[\s\S]*diagnose-workspace-truth/);
   assert.match(toml,/from = "\/api\/workspace\/monitoring"[\s\S]*workspace-monitoring/);
-  assert.match(monitoring,/autoRepairMode/);
+  assert.match(monitoringUi,/autoRepairMode:'off'/);
   assert.match(monitoring,/monitoring\.enabled&&!workspace\.siteOrigin/);
 });
 
