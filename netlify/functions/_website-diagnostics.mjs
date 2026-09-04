@@ -1,4 +1,6 @@
-const UA='WeaveRelay-Website-Diagnostics/1.0';
+import { publicFetch } from './_public-url.mjs';
+
+const UA='WeaveRelay-Website-Diagnostics/1.1';
 const timeout=ms=>AbortSignal.timeout?AbortSignal.timeout(ms):undefined;
 const clean=v=>String(v??'').trim();
 const safeUrl=value=>{try{const u=new URL(clean(value));return ['https:','http:'].includes(u.protocol)?u:null}catch{return null}};
@@ -8,10 +10,10 @@ const unique=a=>[...new Set(a.filter(Boolean))];
 const check=(id,label,status,detail,evidence={})=>({id,label,status,detail,evidence:{source:'weaverelay-website-diagnostics',...evidence}});
 
 async function request(url,{fetchImpl=fetch,method='GET'}={}){
-  const r=await fetchImpl(url,{method,headers:{'user-agent':UA,accept:'text/html,application/json,text/css,application/javascript,*/*'},redirect:'follow',signal:timeout(8000)});
+  const r=await publicFetch(url,{method,headers:{'user-agent':UA,accept:'text/html,application/json,text/css,application/javascript,*/*'},signal:timeout(8000)},{fetchImpl,allowLocalDev:false});
   const contentType=r.headers?.get?.('content-type')||'';
   const text=method==='HEAD'?'':(await r.text()).slice(0,500000);
-  return{ok:r.ok,status:r.status,url:r.url||url,contentType,text};
+  return{ok:r.ok,status:r.status,url:r.url||String(url),contentType,text};
 }
 
 function extractAssets(html,base){
@@ -44,20 +46,17 @@ async function probeSelfDiagnostic(origin,{fetchImpl=fetch}={}){
 
 export async function buildWebsiteDiagnosticEvidence(siteOrigin,{fetchImpl=fetch}={}){
   const checks=[];const origin=safeUrl(siteOrigin);if(!origin)return{checks:[check('website.document','Website document','WARN','A valid website URL is required before website diagnostics can run.',{})]};
-  let home;try{home=await request(origin.href,{fetchImpl})}catch{return{checks:[check('website.document','Website document','FAIL','The customer website could not be reached by the website diagnostic probe.',{url:origin.href,httpStatus:null})]}};
-  checks.push(check('website.document','Website document',home.ok?'PASS':'FAIL',home.ok?`The website document returned HTTP ${home.status}.`:`The website document returned HTTP ${home.status}.`,{url:origin.href,finalUrl:home.url,httpStatus:home.status,contentType:home.contentType}));
+  let home;try{home=await request(origin.href,{fetchImpl})}catch(error){const unsafe=/private network|public https|resolved safely/i.test(String(error?.message||''));return{checks:[check('website.document','Website document',unsafe?'WARN':'FAIL',unsafe?'The configured website failed WeaveRelay public-network safety validation.':'The customer website could not be reached by the website diagnostic probe.',{url:origin.href,httpStatus:null})]}};
+  checks.push(check('website.document','Website document',home.ok?'PASS':'FAIL',`The website document returned HTTP ${home.status}.`,{url:origin.href,finalUrl:home.url,httpStatus:home.status,contentType:home.contentType}));
   const html=/text\/html|application\/xhtml\+xml/i.test(home.contentType);
   checks.push(check('website.html-response','Website HTML response',home.ok&&!html?'WARN':'PASS',html?'The production URL returned an HTML document.':'The production URL did not return an HTML content type.',{contentType:home.contentType,finalUrl:home.url}));
   if(!home.ok||!html)return{checks};
-
   const assets=extractAssets(home.text,home.url),mixed=mixedAssets(assets,home.url);
   checks.push(check('website.mixed-content','Website mixed content',mixed.length?'FAIL':'PASS',mixed.length?`${mixed.length} script or stylesheet asset${mixed.length===1?' is':'s are'} loaded over HTTP from an HTTPS page.`:'No HTTP script or stylesheet references were found on the HTTPS page.',{mixedAssetCount:mixed.length,firstMixedUrl:mixed[0]?.url||null}));
   const assetResults=await probeUrls(assets,{fetchImpl}),sameOriginBroken=assetResults.filter(r=>sameOrigin(r.url,home.url)&&!r.ok),externalBroken=assetResults.filter(r=>!sameOrigin(r.url,home.url)&&!r.ok);
   checks.push(check('website.assets','Website scripts and styles',sameOriginBroken.length?'FAIL':externalBroken.length?'WARN':'PASS',sameOriginBroken.length?`${sameOriginBroken.length} same-site script or stylesheet asset${sameOriginBroken.length===1?' is':'s are'} broken.`:externalBroken.length?`${externalBroken.length} external script or stylesheet asset${externalBroken.length===1?' could':'s could'} not be verified.`:`${assetResults.length} discovered script/style asset${assetResults.length===1?'':'s'} verified without a same-site failure.`,{assetCount:assetResults.length,brokenSameOriginCount:sameOriginBroken.length,brokenExternalCount:externalBroken.length,brokenUrls:safeFailureUrls(assetResults),firstBrokenUrl:sameOriginBroken[0]?.url||externalBroken[0]?.url||null}));
-
   const links=extractInternalLinks(home.text,home.url),linkResults=await probeUrls(links,{fetchImpl}),brokenLinks=linkResults.filter(r=>!r.ok);
   checks.push(check('website.internal-links','Website internal navigation',brokenLinks.length?'WARN':'PASS',brokenLinks.length?`${brokenLinks.length} sampled internal page link${brokenLinks.length===1?' is':'s are'} returning an error.`:`${linkResults.length} sampled internal page link${linkResults.length===1?'':'s'} verified without an HTTP error.`,{sampledLinkCount:linkResults.length,brokenLinkCount:brokenLinks.length,brokenUrls:safeFailureUrls(linkResults),firstBrokenUrl:brokenLinks[0]?.url||null}));
-
   const self=await probeSelfDiagnostic(home.url,{fetchImpl});checks.push(check('website.self-diagnostic','Application self-diagnostic',self.status,self.detail,{url:self.url,...self.evidence}));
   return{checks};
 }
