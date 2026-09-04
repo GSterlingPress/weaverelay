@@ -20,9 +20,18 @@ function run({ report, state }) {
   return { state: JSON.parse(fs.readFileSync(statePath)), event: JSON.parse(fs.readFileSync(eventPath)) };
 }
 const probe = ok => ({ ok, status: ok ? 200 : 503 });
-const report = (ok, classification=ok?'HEALTHY_OR_PARTIAL':'OUTAGE_UNRESOLVED') => ({
-  target:'weaverelay.com', observations:{apex:probe(ok),www:probe(ok)},
-  classification:{state:classification,severity:ok?'info':'critical',repairClass:ok?'none':'gather-evidence'}
+const report = (ok, classification=ok?'HEALTHY_OR_PARTIAL':'OUTAGE_UNRESOLVED', recoveryConfirmed=ok) => ({
+  target:'weaverelay.com',
+  observations:{apex:probe(ok),www:probe(ok)},
+  classification:{state:classification,severity:ok?'info':'critical',repairClass:ok?'none':'gather-evidence'},
+  confirmation:{
+    requiredConsecutiveFailures:2,
+    consecutiveFailures:ok?0:2,
+    outageConfirmed:!ok,
+    requiredConsecutiveHealthy:2,
+    consecutiveHealthy:recoveryConfirmed?2:(ok?1:0),
+    recoveryConfirmed,
+  },
 });
 
 test('first outage emits one incident event', () => {
@@ -42,19 +51,37 @@ test('continuing outage is deduplicated', () => {
 
 test('one recovered hostname is not enough to announce recovery', () => {
   const first=run({report:report(false)});
-  const partial={...report(true),observations:{apex:probe(true),www:probe(false)}};
+  const partial={...report(true,'HEALTHY_OR_PARTIAL',false),observations:{apex:probe(true),www:probe(false)}};
   const r=run({report:partial,state:first.state});
   assert.equal(r.state.phase,'incident');
   assert.equal(r.event.send,false);
 });
 
-test('verified public recovery emits exactly one recovery', () => {
+test('single healthy round does not close an incident', () => {
   const first=run({report:report(false)});
-  const recovered=run({report:report(true),state:first.state});
+  const candidate=run({report:report(true,'HEALTHY_OR_PARTIAL',false),state:first.state});
+  assert.equal(candidate.state.phase,'incident');
+  assert.equal(candidate.event.type,'none');
+  assert.equal(candidate.event.send,false);
+  assert.ok(candidate.state.recoveryCandidateAt);
+});
+
+test('recovery bounce resets candidate and keeps incident open', () => {
+  const first=run({report:report(false)});
+  const candidate=run({report:report(true,'HEALTHY_OR_PARTIAL',false),state:first.state});
+  const bounced=run({report:report(false),state:candidate.state});
+  assert.equal(bounced.state.phase,'incident');
+  assert.equal(bounced.event.send,false);
+  assert.equal(bounced.state.recoveryCandidateAt,null);
+});
+
+test('two consecutive healthy probe rounds emit exactly one recovery', () => {
+  const first=run({report:report(false)});
+  const recovered=run({report:report(true,'HEALTHY_OR_PARTIAL',true),state:first.state});
   assert.equal(recovered.state.phase,'healthy');
   assert.equal(recovered.event.type,'recovery');
   assert.equal(recovered.event.send,true);
-  const stable=run({report:report(true),state:recovered.state});
+  const stable=run({report:report(true,'HEALTHY_OR_PARTIAL',true),state:recovered.state});
   assert.equal(stable.event.type,'none');
   assert.equal(stable.event.send,false);
 });
