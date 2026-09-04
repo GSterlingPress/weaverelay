@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifySelfOutage, buildSelfMonitorReport } from '../netlify/functions/_self-monitor-core.mjs';
+import { classifySelfOutage, buildSelfMonitorReport, buildConfirmedSelfMonitorReport } from '../netlify/functions/_self-monitor-core.mjs';
 
 const pass = (url='https://origin.example') => ({ url, ok:true, status:200, observedAt:new Date().toISOString() });
 const fail = (url='https://weaverelay.com') => ({ url, ok:false, status:503, observedAt:new Date().toISOString() });
+const round = (healthy, origin=null) => ({
+  apex: healthy ? pass('https://weaverelay.com') : fail('https://weaverelay.com'),
+  www: healthy ? pass('https://www.weaverelay.com') : fail('https://www.weaverelay.com'),
+  origin,
+  providerStatus:{netlifyOperational:true},
+});
 
 test('healthy public endpoint does not trigger repair', () => {
   const r = classifySelfOutage({ apex:pass(), www:fail(), providerStatus:{netlifyOperational:true} });
@@ -35,4 +41,27 @@ test('ambiguous outage fails closed', () => {
   assert.equal(report.classification.state, 'OUTAGE_UNRESOLVED');
   assert.equal(report.recovery.automaticMutationAllowed, false);
   assert.equal(report.recovery.verificationRequired, true);
+});
+
+test('one transient failed round does not declare an outage', () => {
+  const report = buildConfirmedSelfMonitorReport({ first: round(false), second: round(true), confirmationIntervalMs: 20000 });
+  assert.equal(report.classification.state, 'TRANSIENT_FAILURE_RECOVERED');
+  assert.equal(report.classification.severity, 'warn');
+  assert.equal(report.confirmation.confirmed, false);
+  assert.equal(report.confirmation.consecutiveFailures, 1);
+});
+
+test('two consecutive failed rounds confirm sustained outage quickly', () => {
+  const report = buildConfirmedSelfMonitorReport({ first: round(false), second: round(false), confirmationIntervalMs: 20000 });
+  assert.equal(report.classification.severity, 'critical');
+  assert.equal(report.confirmation.confirmed, true);
+  assert.equal(report.confirmation.requiredConsecutiveFailures, 2);
+  assert.equal(report.confirmation.consecutiveFailures, 2);
+});
+
+test('healthy first round skips incident confirmation', () => {
+  const report = buildConfirmedSelfMonitorReport({ first: round(true), confirmationIntervalMs: 20000 });
+  assert.equal(report.classification.severity, 'info');
+  assert.equal(report.confirmation.confirmed, false);
+  assert.equal(report.confirmation.consecutiveFailures, 0);
 });
