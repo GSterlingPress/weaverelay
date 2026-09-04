@@ -6,6 +6,7 @@ import{json,safeError}from'./_http.mjs';
 
 const monitorStore=()=>scopedStore('weaverelay-monitoring');
 const clean=v=>String(v??'').trim();
+const asArray=value=>Array.isArray(value)?value:[];
 
 function normalizeProviderList(value){
   const raw=Array.isArray(value)?value:(value&&typeof value==='object'?Object.entries(value).map(([id,item])=>item&&typeof item==='object'?{id,...item}:id):[]);
@@ -20,19 +21,57 @@ function normalizeProviderList(value){
   return out;
 }
 
+function normalizeFinding(value){
+  if(!value||typeof value!=='object')return null;
+  const actions=Array.isArray(value.actions)?value.actions:(value.actions==null?[]:[value.actions]);
+  const repair=value.repair&&typeof value.repair==='object'?value.repair:{};
+  const openProvider=value.openProvider&&typeof value.openProvider==='object'?value.openProvider:null;
+  return{
+    ...value,
+    title:clean(value.title),
+    explanation:clean(value.explanation||value.detail||value.summary),
+    provider:clean(value.provider).toLowerCase()||null,
+    actions:actions.map(clean).filter(Boolean),
+    repair,
+    openProvider
+  };
+}
+
+function normalizeDiagnosis(value){
+  if(!value||typeof value!=='object')return null;
+  const findings=asArray(value.findings).map(normalizeFinding).filter(Boolean);
+  const checks=asArray(value.checks).filter(item=>item&&typeof item==='object');
+  return{
+    ...value,
+    status:clean(value.status)||'attention',
+    headline:clean(value.headline||value.title)||'Website diagnosis',
+    summary:clean(value.summary||value.detail),
+    findings,
+    checks
+  };
+}
+
+function normalizeStackMap(value){
+  if(!value||typeof value!=='object')return{nodes:[],flow:[]};
+  return{
+    ...value,
+    nodes:asArray(value.nodes).filter(Boolean),
+    flow:asArray(value.flow).map(item=>clean(item&&typeof item==='object'?(item.label||item.name||item.id):item)).filter(Boolean)
+  };
+}
+
 function normalizeWorkspaceForUi(workspace){
-  const providers=normalizeProviderList(workspace.providers);
-  const diagnosis=workspace.diagnosis&&typeof workspace.diagnosis==='object'?{
-    ...workspace.diagnosis,
-    findings:Array.isArray(workspace.diagnosis.findings)?workspace.diagnosis.findings.filter(Boolean):[],
-    checks:Array.isArray(workspace.diagnosis.checks)?workspace.diagnosis.checks.filter(Boolean):[]
-  }:null;
-  const stackMap=workspace.stackMap&&typeof workspace.stackMap==='object'?{
-    ...workspace.stackMap,
-    nodes:Array.isArray(workspace.stackMap.nodes)?workspace.stackMap.nodes.filter(Boolean):[],
-    flow:Array.isArray(workspace.stackMap.flow)?workspace.stackMap.flow.map(clean).filter(Boolean):[]
-  }:{nodes:[],flow:[]};
-  return{...workspace,providers,diagnosis,stackMap};
+  const safeWorkspace=workspace&&typeof workspace==='object'?workspace:{};
+  return{
+    ...safeWorkspace,
+    id:clean(safeWorkspace.id),
+    name:clean(safeWorkspace.name)||'Website',
+    siteOrigin:clean(safeWorkspace.siteOrigin||safeWorkspace.origin||safeWorkspace.url),
+    status:clean(safeWorkspace.status)||'needs_action',
+    providers:normalizeProviderList(safeWorkspace.providers),
+    diagnosis:normalizeDiagnosis(safeWorkspace.diagnosis),
+    stackMap:normalizeStackMap(safeWorkspace.stackMap)
+  };
 }
 
 function safeIncident(value){
@@ -82,11 +121,12 @@ function legacyMonitoringIncident(monitoringState){
 
 export default async request=>{
   try{
-    const user=await requireUser(request),url=new URL(request.url),storedWorkspace=await requireWorkspace(user.id,url.searchParams.get('id')),workspace=normalizeWorkspaceForUi(storedWorkspace);
+    const user=await requireUser(request),url=new URL(request.url),requestedId=clean(url.searchParams.get('id')),storedWorkspace=await requireWorkspace(user.id,requestedId),workspace=normalizeWorkspaceForUi(storedWorkspace);
+    if(!workspace.id)workspace.id=requestedId;
     const connections={};
     for(const p of workspace.providers){
       const c=await readConnection(workspace.id,p.id).catch(()=>null);
-      if(c)connections[p.id]={status:c.status,externalAccountName:c.externalAccountName||null,scopes:Array.isArray(c.scopes)?c.scopes:[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:c.lastErrorCode||null};
+      if(c&&typeof c==='object')connections[p.id]={status:clean(c.status)||'connected',externalAccountName:clean(c.externalAccountName)||null,scopes:Array.isArray(c.scopes)?c.scopes.map(clean).filter(Boolean):[],lastCheckedAt:c.lastCheckedAt||null,lastErrorCode:clean(c.lastErrorCode)||null};
     }
     let state=null;
     try{state=await monitorStore().get(`state/${workspace.id}.json`,{type:'json',consistency:'strong'});}catch{}
@@ -103,6 +143,6 @@ export default async request=>{
     }:null;
     const monitoringIncident=legacyMonitoringIncident(monitoringState);
     const relayOrigin=url.origin,runtimeObserver={workspaceId:workspace.id,scriptUrl:`${relayOrigin}/wr-runtime-agent.js`,beaconUrl:`${relayOrigin}/api/runtime/beacon`,privacy:{formValues:false,responseBodies:false,headers:false,cookies:false,automaticClicks:false,automaticFormSubmissions:false},journeyAttributes:['data-weaverelay-journey','data-weaverelay-step']};
-    return json(200,{ok:true,workspace,connections,monitoringState,monitoringIncident,runtimeObserver});
+    return json(200,{ok:true,workspace,connections,monitoringState,monitoringIncident,runtimeObserver,uiContractVersion:2});
   }catch(error){return safeError(error)}
 };
