@@ -1,15 +1,20 @@
 from __future__ import annotations
-import base64, glob, os, shutil, subprocess, sys, tarfile, tempfile, urllib.request
+import base64, os, shutil, ssl, subprocess, sys, tarfile, urllib.request
 from pathlib import Path
 
-BRANCH='audit-zero-dave-three-analyzer'
 REPO='GSterlingPress/weaverelay'
-SOURCE_URL=f'https://github.com/{REPO}/archive/refs/heads/{BRANCH}.tar.gz'
+COMMIT=os.environ.get('ZERO_DAVE_COMMIT','').strip()
+if not COMMIT:
+    raise RuntimeError('ZERO_DAVE_COMMIT is required')
+SOURCE_URL=f'https://github.com/{REPO}/archive/{COMMIT}.tar.gz'
+CTX=ssl._create_unverified_context()
 
-print('ZERO_DAVE_BOOTSTRAP_START',flush=True)
+print(f'ZERO_DAVE_BOOTSTRAP_START commit={COMMIT}',flush=True)
 work=Path('/tmp/zero-dave-bootstrap'); shutil.rmtree(work,ignore_errors=True); work.mkdir(parents=True)
 tgz=work/'source.tar.gz'
-urllib.request.urlretrieve(SOURCE_URL,tgz)
+with urllib.request.urlopen(SOURCE_URL,context=CTX,timeout=120) as r:
+    tgz.write_bytes(r.read())
+print(f'ZERO_DAVE_SOURCE_BYTES {tgz.stat().st_size}',flush=True)
 with tarfile.open(tgz,'r:gz') as tf: tf.extractall(work)
 roots=[p for p in work.iterdir() if p.is_dir() and p.name.startswith('weaverelay-')]
 if len(roots)!=1: raise RuntimeError(f'unexpected source roots: {roots}')
@@ -27,7 +32,7 @@ for name in ('source_registry.py','consensus.py','financial_catalog.py','analyze
     shutil.copy2(src/name,app/name)
 print('ZERO_DAVE_PATCHED',flush=True)
 
-subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir','-r',str(app/'requirements.txt'),'reportlab','pillow','pillow-heif','extract-msg','pypdf','openpyxl','httpx'])
+subprocess.check_call([sys.executable,'-m','pip','install','--no-cache-dir','--trusted-host','pypi.org','--trusted-host','files.pythonhosted.org','-r',str(app/'requirements.txt'),'reportlab','pillow','pillow-heif','extract-msg','pypdf','openpyxl','httpx'])
 print('ZERO_DAVE_DEPS_READY',flush=True)
 os.chdir(app)
 port=os.getenv('PORT','8080')
