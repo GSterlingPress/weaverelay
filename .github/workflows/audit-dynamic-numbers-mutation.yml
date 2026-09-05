@@ -4,6 +4,7 @@ on:
     branches: [audit-hardening-four-failures]
     paths:
       - 'audit-pilot/benchmarks/dynamic_numbers_mutation.py'
+      - 'audit-pilot/hardening_patch.py'
       - '.github/workflows/audit-dynamic-numbers-mutation.yml'
   workflow_dispatch:
 jobs:
@@ -28,8 +29,11 @@ jobs:
       - name: Run dynamic-number mutation benchmark
         env:
           AUDIT_RUNTIME_DIR: /tmp/audit-runtime
-        run: python audit-pilot/benchmarks/dynamic_numbers_mutation.py | tee dynamic-numbers-mutation.json
+        run: |
+          set -o pipefail
+          python audit-pilot/benchmarks/dynamic_numbers_mutation.py | tee dynamic-numbers-mutation.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: audit-dynamic-numbers-mutation
           path: dynamic-numbers-mutation.json
