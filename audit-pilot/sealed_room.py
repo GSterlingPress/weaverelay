@@ -40,7 +40,7 @@ def _container_base(room: Path) -> list[str]:
     return [docker,'run','--rm','--network','none','--read-only','--cap-drop','ALL',
             '--security-opt','no-new-privileges','--pids-limit','64','--memory','1g','--cpus','1',
             '--tmpfs','/tmp:rw,noexec,nosuid,nodev,size=128m','--user',f'{uid}:{gid}',
-            '--mount',f'type=bind,src={room},dst=/work,rw','--workdir','/work',image]
+            '--mount',f'type=bind,src={room},dst=/work','--workdir','/work',image]
 
 def _sandbox_python(room: Path, script: str, args: list[str], analyzer: str | None=None) -> subprocess.CompletedProcess:
     cmd=_container_base(room)
