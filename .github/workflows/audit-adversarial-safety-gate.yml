@@ -4,6 +4,7 @@ on:
     branches: [audit-hardening-four-failures]
     paths:
       - 'audit-pilot/benchmarks/adversarial_safety_gate.py'
+      - 'audit-pilot/hardening_patch.py'
       - '.github/workflows/audit-adversarial-safety-gate.yml'
 permissions:
   contents: read
@@ -29,7 +30,9 @@ jobs:
       - name: Run adversarial safety gate
         env:
           AUDIT_RUNTIME_DIR: /tmp/audit-runtime
-        run: python audit-pilot/benchmarks/adversarial_safety_gate.py | tee adversarial-safety-gate.json
+        run: |
+          set -o pipefail
+          python audit-pilot/benchmarks/adversarial_safety_gate.py | tee adversarial-safety-gate.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
