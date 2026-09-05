@@ -5,6 +5,7 @@ on:
     paths:
       - 'audit-pilot/reanalysis.py'
       - 'audit-pilot/test_reanalysis_adversarial.py'
+      - 'audit-pilot/reanalysis_child_process_gate.py'
       - '.github/workflows/zero-dave-reanalysis-adversarial.yml'
   workflow_dispatch:
 jobs:
@@ -15,7 +16,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest
+      - run: pip install pytest pypdf openpyxl
       - name: Four adversarial reconciliation gates
         working-directory: audit-pilot
         run: pytest -q test_reanalysis_adversarial.py
+      - name: Real child-process forced-disagreement integration gate
+        working-directory: audit-pilot
+        run: python reanalysis_child_process_gate.py
