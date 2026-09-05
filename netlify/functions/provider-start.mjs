@@ -8,6 +8,9 @@ import{json,safeError}from'./_http.mjs';
 const challenge=v=>crypto.createHash('sha256').update(v).digest('base64url');
 const env=key=>{try{return globalThis.Netlify?.env?.get?.(key)||''}catch{return ''}};
 const siteBase=()=>String(env('PUBLIC_SITE_URL')||'').replace(/\/$/,'');
+const requestHost=request=>{try{return new URL(request.url).hostname.toLowerCase()}catch{return''}};
+const isPreview=request=>requestHost(request).endsWith('--weaverelay.netlify.app');
+const fingerprint=value=>crypto.createHash('sha256').update(String(value)).digest('hex').slice(0,12);
 
 export default async request=>{
   if(request.method!=='POST')return json(405,{error:'Method not allowed.'});
@@ -33,7 +36,8 @@ export default async request=>{
       if(!clientId||!base)return json(409,{error:'Netlify authorization needs one-time WeaveRelay OAuth app setup before customers can connect.',configuration:'CONNECT_NETLIFY_CLIENT_ID + PUBLIC_SITE_URL'});
       const registeredRedirectUri=`${base}/api/oauth/netlify/callback`,u=new URL('https://app.netlify.com/authorize');
       u.searchParams.set('client_id',clientId);u.searchParams.set('response_type','token');u.searchParams.set('redirect_uri',registeredRedirectUri);u.searchParams.set('state',state);
-      return json(200,{ok:true,provider,authorizationUrl:u.toString(),access:'Netlify OAuth — no personal access token copying'});
+      const diagnostics=isPreview(request)?{authorizationHost:u.hostname,responseType:u.searchParams.get('response_type'),redirectUri:registeredRedirectUri,clientIdFingerprint:fingerprint(clientId),clientIdLength:clientId.length,stateLength:state.length}:undefined;
+      return json(200,{ok:true,provider,authorizationUrl:u.toString(),access:'Netlify OAuth — no personal access token copying',...(diagnostics?{diagnostics}:{})});
     }
     const envPrefix={supabase:'CONNECT_SUPABASE',stripe:'CONNECT_STRIPE'}[provider];
     return json(409,{error:`${PROVIDERS[provider].label} adapter is structurally ready but its live OAuth exchange is not activated in this build.`,configuration:envPrefix?`${envPrefix}_CLIENT_ID + ${envPrefix}_CLIENT_SECRET`:'Provider-specific least-privilege authorization required.'});
