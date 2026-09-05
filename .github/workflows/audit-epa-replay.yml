@@ -1,0 +1,36 @@
+name: Audit EPA Replay 2
+
+on:
+  push:
+    branches:
+      - audit-epa-replay-2
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+          test -f /tmp/audit-runtime/audit_engine/pipeline.py
+      - name: Install frozen runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Run EPA public-record replay unchanged
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/epa_public_replay.py | tee epa-replay-output.json
+      - name: Upload frozen first-run output
+        uses: actions/upload-artifact@v4
+        with:
+          name: epa-replay-first-run
+          path: epa-replay-output.json
