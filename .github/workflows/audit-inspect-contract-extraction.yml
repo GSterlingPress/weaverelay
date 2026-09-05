@@ -1,0 +1,26 @@
+name: Audit inspect contract extraction
+on:
+  workflow_dispatch:
+  push:
+    branches: [audit-hardening-four-failures]
+    paths: ['.github/workflows/audit-inspect-contract-extraction.yml']
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct frozen runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+      - name: Print relevant extraction source
+        run: |
+          echo '=== pipeline.py ==='
+          sed -n '1,260p' /tmp/audit-runtime/audit_engine/pipeline.py
+          echo '=== extract.py ==='
+          sed -n '1,360p' /tmp/audit-runtime/audit_engine/extract.py
+          echo '=== document_intelligence.py ==='
+          sed -n '1,320p' /tmp/audit-runtime/audit_engine/document_intelligence.py
+          echo '=== ocr_adapter.py ==='
+          sed -n '1,320p' /tmp/audit-runtime/audit_engine/ocr_adapter.py
