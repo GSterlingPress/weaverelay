@@ -60,7 +60,8 @@ def run_sealed_process(analyzer_name: str, *, audit_id: str, contract: str, invo
     The child gets a scrubbed environment. Peer outputs/catalogs, consensus state, disagreement
     hints, expected dollars and prior analyzer results are never placed in its room or envelope.
     """
-    worker = Path(__file__).with_name('zero_dave_process_worker.py').resolve()
+    app_root = Path(__file__).parent.resolve()
+    worker = app_root / 'zero_dave_process_worker.py'
     with tempfile.TemporaryDirectory(prefix=f'zero_dave_room_{analyzer_name}_') as td:
         room = Path(td).resolve()
         sealed = make_sealed_evidence(contract, invoice, field, evidence, room)
@@ -75,14 +76,21 @@ def run_sealed_process(analyzer_name: str, *, audit_id: str, contract: str, invo
             'evidence': list(sealed.evidence),
         }
         input_path.write_text(json.dumps(envelope), encoding='utf-8')
+        # -I intentionally ignores PYTHONPATH. Add only the application code root explicitly
+        # inside the isolated interpreter; do not inherit the parent's import path or state.
+        bootstrap = (
+            "import runpy,sys;"
+            f"sys.path.insert(0,{str(app_root)!r});"
+            f"sys.argv=[{str(worker)!r},{str(input_path)!r},{str(output_path)!r}];"
+            f"runpy.run_path({str(worker)!r},run_name='__main__')"
+        )
         env = {
             'PATH': os.environ.get('PATH', ''),
-            'PYTHONPATH': str(Path(__file__).parent.resolve()),
             'PYTHONHASHSEED': '0',
             'ZERO_DAVE_ANALYZER': analyzer_name,
         }
         cp = subprocess.run(
-            [sys.executable, '-I', str(worker), str(input_path), str(output_path)],
+            [sys.executable, '-I', '-c', bootstrap],
             cwd=str(room), env=env, capture_output=True, text=True, timeout=300,
         )
         if cp.returncode != 0:
