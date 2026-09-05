@@ -2,7 +2,7 @@ import { PROVIDERS } from './_provider-catalog.mjs';
 
 export const PROVIDER_CONNECTION_CONTRACT=Object.freeze({
   github:Object.freeze({method:'oauth',customerState:'CONNECT',connectedState:'CONNECTED',failureState:'NEEDS ACTION',actionLabel:'AUTHORIZE GITHUB',probe:'github.live'}),
-  netlify:Object.freeze({method:'credential',customerState:'CONNECT',connectedState:'CONNECTED',failureState:'NEEDS ACTION',actionLabel:'CONNECT NETLIFY',probe:'netlify.account'}),
+  netlify:Object.freeze({method:'oauth',customerState:'CONNECT',connectedState:'CONNECTED',failureState:'NEEDS ACTION',actionLabel:'AUTHORIZE NETLIFY',probe:'netlify.account'}),
   railway:Object.freeze({method:'oauth',customerState:'CONNECT',connectedState:'CONNECTED',failureState:'NEEDS ACTION',actionLabel:'SELECT PROJECT → AUTHORIZE READ-ONLY',probe:'railway.runtime'}),
   supabase:Object.freeze({method:'credential',customerState:'CONNECT',connectedState:'CONNECTED',failureState:'NEEDS ACTION',actionLabel:'CONNECT SUPABASE',probe:'supabase.live'}),
   stripe:Object.freeze({method:'credential',customerState:'CONNECT',connectedState:'CONNECTED',failureState:'NEEDS ACTION',actionLabel:'CONNECT STRIPE',probe:'stripe.live'}),
