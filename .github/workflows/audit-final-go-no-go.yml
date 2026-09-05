@@ -1,0 +1,70 @@
+name: Audit final customer GO-NO-GO
+on:
+  push:
+    branches: [audit-hardening-four-failures]
+    paths:
+      - 'audit-pilot/overall_factor_patch.py'
+      - '.github/workflows/audit-final-go-no-go.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  final-gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install OCR system dependencies
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr poppler-utils
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+          test -f /tmp/audit-runtime/audit_engine/pipeline.py
+      - name: Apply existing safety hardening
+        run: python audit-pilot/hardening_patch.py /tmp/audit-runtime
+      - name: Apply ONLY overall-factor language repair
+        run: python audit-pilot/overall_factor_patch.py /tmp/audit-runtime
+      - name: Install runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Run complete regression suite
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: |
+          set -uo pipefail
+          mkdir -p final-go-no-go-results
+          failures=0
+          run_case() {
+            name="$1"; script="$2"
+            echo "===== $name ====="
+            set +e
+            python "$script" 2>&1 | tee "final-go-no-go-results/${name}.json"
+            rc=${PIPESTATUS[0]}
+            set -e
+            if [ "$rc" -ne 0 ]; then
+              echo "FAIL $name rc=$rc"
+              failures=$((failures+1))
+            else
+              echo "PASS $name"
+            fi
+          }
+          set -e
+          run_case adversarial audit-pilot/benchmarks/adversarial_safety_gate.py
+          run_case dynamic audit-pilot/benchmarks/dynamic_numbers_mutation.py
+          run_case broward audit-pilot/benchmarks/broward_public_replay.py
+          run_case epa audit-pilot/benchmarks/epa_public_replay.py
+          run_case louisiana audit-pilot/benchmarks/louisiana_public_replay.py
+          run_case hundred-page audit-pilot/benchmarks/hundred_page_contract_stress.py
+          run_case ugly-108 audit-pilot/benchmarks/ugly_document_stress.py
+          run_case final-public-package audit-pilot/benchmarks/final_public_package.py
+          printf '{"suite_failures":%s,"suite_pass":%s}\n' "$failures" "$([ "$failures" -eq 0 ] && echo true || echo false)" | tee final-go-no-go-results/summary.json
+          test "$failures" -eq 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-final-go-no-go-results
+          path: final-go-no-go-results/
