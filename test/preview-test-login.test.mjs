@@ -32,12 +32,15 @@ test('preview sign-in page auto-submits only the preview-marked one-time token',
   assert.match(signin,/fetch\('\/api\/auth\/verify'/);
 });
 
-test('deploy previews bypass app login while production still requires a real session',async()=>{
+test('every Netlify or staging deploy bypasses app login while customer domains still use real sessions',async()=>{
   const auth=await fs.readFile(new URL('../netlify/functions/_auth.mjs',import.meta.url),'utf8');
+  assert.match(auth,/host\.endsWith\('\.netlify\.app'\)/);
+  assert.match(auth,/host===['"]staging\.weaverelay\.com['"]/);
   assert.match(auth,/deploy-preview/);
   assert.match(auth,/branch-deploy/);
-  assert.match(auth,/if\(isPreviewContext\(\)\)return PREVIEW_USER/);
+  assert.match(auth,/if\(isTestDeployRequest\(request\)\)return PREVIEW_USER/);
   assert.match(auth,/const raw=parseCookies\(request\)\[SESSION_COOKIE\]/);
   assert.match(auth,/if\(!raw\)return null/);
-  assert.match(auth,/if\(isPreviewContext\(\)\)return;const raw=parseCookies/);
+  assert.match(auth,/if\(isTestDeployRequest\(request\)\)return;const raw=parseCookies/);
+  assert.doesNotMatch(auth,/host===['"]weaverelay\.com['"]\)return true/);
 });
