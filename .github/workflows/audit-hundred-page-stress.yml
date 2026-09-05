@@ -1,0 +1,37 @@
+name: Audit 100-page contract stress
+on:
+  push:
+    branches: [audit-hardening-four-failures]
+    paths:
+      - 'audit-pilot/benchmarks/hundred_page_contract_stress.py'
+      - 'audit-pilot/hardening_patch.py'
+      - '.github/workflows/audit-hundred-page-stress.yml'
+  workflow_dispatch:
+
+jobs:
+  stress:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+          test -f /tmp/audit-runtime/audit_engine/pipeline.py
+      - name: Apply current narrow hardening
+        run: python audit-pilot/hardening_patch.py /tmp/audit-runtime
+      - name: Install runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Run 100-page stress benchmark
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/hundred_page_contract_stress.py | tee hundred-page-stress.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-hundred-page-stress
+          path: hundred-page-stress.json
