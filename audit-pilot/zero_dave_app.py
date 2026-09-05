@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-import base64, html, json, os, secrets, shutil
+import base64, html, json, os, secrets, shutil, tempfile, re
 
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, Response, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response, PlainTextResponse, JSONResponse
 
 from secure_jobs import BASE, cleanup_expired, delete_raw_uploads, new_job_dir, save_upload_limited
 from zero_dave_orchestrator import run_zero_dave_audit, write_manifest
@@ -23,10 +23,16 @@ def authorized(request:Request)->bool:
     except Exception:return False
     return secrets.compare_digest(user,supplied_user) and secrets.compare_digest(password,supplied_password)
 
+def selftest_authorized(request:Request)->bool:
+    expected=os.getenv("SELF_TEST_TOKEN",""); supplied=request.query_params.get("token","")
+    return bool(expected) and secrets.compare_digest(expected,supplied)
+
 @app.middleware("http")
 async def security(request,call_next):
     cleanup_expired()
-    if request.url.path not in ("/health","/robots.txt") and not authorized(request):r=Response("Private staging access required.",401,headers={"WWW-Authenticate":"Basic realm=\"Zero-Dave Audit Staging\""})
+    public_ok=request.url.path in ("/health","/robots.txt")
+    test_ok=request.url.path=="/staging/self-test" and selftest_authorized(request)
+    if not public_ok and not test_ok and not authorized(request):r=Response("Private staging access required.",401,headers={"WWW-Authenticate":"Basic realm=\"Zero-Dave Audit Staging\""})
     else:r=await call_next(request)
     r.headers["Cache-Control"]="no-store, max-age=0";r.headers["Pragma"]="no-cache";r.headers["X-Content-Type-Options"]="nosniff";r.headers["X-Frame-Options"]="DENY";r.headers["Referrer-Policy"]="no-referrer";r.headers["X-Robots-Tag"]="noindex, nofollow, noarchive";r.headers["Content-Security-Policy"]="default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
     return r
@@ -66,6 +72,32 @@ def download(job_id:str,filename:str):
     if not p.exists():return HTMLResponse("Expired or not found",404)
     media="application/pdf" if p.suffix==".pdf" else ("application/zip" if p.suffix==".zip" else "application/json")
     return FileResponse(p,filename=filename,media_type=media,headers={"Cache-Control":"no-store"})
+
+@app.get('/staging/self-test')
+def staging_self_test(request:Request):
+    if not selftest_authorized(request):return JSONResponse({'ok':False,'error':'not authorized'},403)
+    import httpx
+    port=os.getenv('PORT','8080'); base=f'http://127.0.0.1:{port}'; user=os.getenv('PILOT_USERNAME',''); pw=os.getenv('PILOT_PASSWORD','')
+    with tempfile.TemporaryDirectory() as td:
+        d=Path(td); contract=d/'contract.txt'; invoice=d/'invoice.csv'; payroll=d/'payroll.csv'
+        contract.write_text('Commercial labor billing clause. Overall multiplier of 2.417. The multiplier is applied to the actual hourly labor rate paid to employees to determine the invoiced billing rate.\n',encoding='utf-8')
+        invoice.write_text('invoice_id,rate_key,hours,rate,amount,vendor,service_date,description\nLIVE-1,Field Engineer,7.5,84.75,635.625,Live Test Vendor,2026-09-01,Field Engineer\n',encoding='utf-8')
+        payroll.write_text('invoice_id,classification,hours,rate,service_date,description\nLIVE-1,Field Engineer,7.5,31.28,2026-09-01,Payroll register actual hourly rate\n',encoding='utf-8')
+        with httpx.Client(timeout=180.0,auth=(user,pw)) as client:
+            with contract.open('rb') as cf, invoice.open('rb') as inf, payroll.open('rb') as pf:
+                r=client.post(base+'/zero-dave/audit',files=[('contract',('contract.txt',cf,'text/plain')),('invoice',('invoice.csv',inf,'text/csv')),('evidence',('payroll.csv',pf,'text/csv'))],data={'complete_package':'yes','authorization':'yes'})
+            links=re.findall(r"href='([^']+)'",r.text); audit_match=re.search(r'Audit ID: <b>([^<]+)</b>',r.text)
+            manifest_link=next((x for x in links if x.endswith('zero-dave-audit.json')),None)
+            if r.status_code!=200 or not manifest_link:return {'ok':False,'post_status':r.status_code,'body':r.text[:1000]}
+            mr=client.get(base+manifest_link); manifest=mr.json()
+            downloads={}
+            for link in links:
+                dr=client.get(base+link); downloads[Path(link).name]={'status':dr.status_code,'bytes':len(dr.content),'content_type':dr.headers.get('content-type')}
+            findings={}
+            for name,res in manifest.get('analyzer_results',{}).items():
+                findings[name]={'engine':res.get('engine'),'findings':[{'code':f.get('code'),'amount':f.get('amount'),'rule':(f.get('_zero_dave_trace') or {}).get('rule_value'),'inputs':(f.get('_zero_dave_trace') or {}).get('inputs')} for f in res.get('findings',[])]}
+            return {'ok':True,'post_status':r.status_code,'audit_id':audit_match.group(1) if audit_match else manifest.get('audit_id'),'verified_total':manifest.get('consensus',{}).get('verified_total'),'unresolved_total':manifest.get('consensus',{}).get('unresolved_potential_total'),'independence':manifest.get('independence'),'analyzers':findings,'consensus_findings':[{'state':f.get('state'),'verified_amount':f.get('verified_amount'),'potential_amount':f.get('potential_amount'),'divergence_stage':f.get('divergence_stage'),'materiality_band':f.get('materiality_band')} for f in manifest.get('consensus',{}).get('findings',[])],'downloads':downloads}
+
 @app.get("/health")
 def health():return {"status":"ok","product":"zero-dave-audit","mode":"private-staging","three_catalogs":True,"independent_financial_engines":True,"shared_financial_kernel":False}
 @app.get("/robots.txt")
