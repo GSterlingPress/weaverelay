@@ -15,19 +15,23 @@ on:
 jobs:
   adversarial:
     runs-on: ubuntu-latest
+    env:
+      ZERO_DAVE_SANDBOX_IMAGE: zero-dave-reanalysis-gate
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: pip install pytest
+      - run: pip install pytest pypdf openpyxl
       - name: Four adversarial reconciliation gates
         working-directory: audit-pilot
         run: pytest -q test_reanalysis_adversarial.py
       - name: Build packaged Zero-Dave runtime
         working-directory: audit-pilot
         run: docker build -f Dockerfile.zero-dave -t zero-dave-reanalysis-gate .
-      - name: Adversarial disposable-sandbox escape gate
-        run: docker run --rm --security-opt seccomp=unconfined --entrypoint python zero-dave-reanalysis-gate /app/sandbox_escape_gate.py
-      - name: Real child-process forced-disagreement integration gate
-        run: docker run --rm --security-opt seccomp=unconfined --entrypoint python zero-dave-reanalysis-gate /app/reanalysis_child_process_gate.py
+      - name: Active one-container sandbox escape gate
+        working-directory: audit-pilot
+        run: python sandbox_escape_gate.py
+      - name: Real one-container-per-analyzer forced-disagreement integration gate
+        working-directory: audit-pilot
+        run: python reanalysis_child_process_gate.py
