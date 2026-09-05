@@ -132,10 +132,15 @@ with tempfile.TemporaryDirectory() as td:
     sf=(rules.get('subcontractor') or {}).get('markup_cap_pct')
     labor=sum(float(f.get('amount') or 0) for f in findings if f.get('code')=='RATE_MISMATCH')
     fee=sum(float(f.get('amount') or 0) for f in findings if f.get('code') in ('SUBCONTRACTOR_MARKUP_EXCEEDED','MARKUP_EXCEEDED'))
-    permitted_codes={'RATE_MISMATCH','SUBCONTRACTOR_MARKUP_EXCEEDED','MARKUP_EXCEEDED'}
-    false_high=[f for f in findings if f.get('confidence')=='HIGH' and float(f.get('amount') or 0)>0 and f.get('code') not in permitted_codes]
+    unrelated_false_high=[f for f in findings if f.get('confidence')=='HIGH' and float(f.get('amount') or 0)>0 and f.get('code') not in {'RATE_MISMATCH','SUBCONTRACTOR_MARKUP_EXCEEDED','MARKUP_EXCEEDED'}]
     expected_total=round(EXPECTED_LABOR+EXPECTED_FEE,2)
     actual_total=round(labor+fee,2)
+    # A legitimate finding TYPE calculated from the wrong governing contract term is still
+    # economically false. Count only the excess confidently asserted dollars as false-high;
+    # missed dollars remain recall failures, not false positives.
+    wrong_rule_false_high=round(max(0.0,labor-EXPECTED_LABOR)+max(0.0,fee-EXPECTED_FEE),2)
+    unrelated_false_high_dollars=round(sum(float(f.get('amount') or 0) for f in unrelated_false_high),2)
+    false_high_dollars=round(wrong_rule_false_high+unrelated_false_high_dollars,2)
     result={
         'benchmark':'Real-world ugly 108-page PDF contract stress',
         'pages':PAGES,
@@ -154,9 +159,12 @@ with tempfile.TemporaryDirectory() as td:
             'subcontract_overbilling':round(fee,2),
             'total_overbilling':actual_total,
             'finding_codes':[f.get('code') for f in findings],
-            'false_high_confidence_dollars':round(sum(float(f.get('amount') or 0) for f in false_high),2),
+            'false_high_confidence_dollars':false_high_dollars,
+            'wrong_rule_false_high_confidence_dollars':wrong_rule_false_high,
+            'unrelated_false_high_confidence_dollars':unrelated_false_high_dollars,
             'unknown_count':len(rules.get('_unknown') or []),
             'ocr_required_pages':rules.get('_ocr_required_pages') or [],
+            'contract_precedence':rules.get('_contract_precedence') or {},
         },
         'scores':{
             'controlling_labor_term_correct': lm==CONTROLLING_LABOR_MULT,
@@ -166,7 +174,7 @@ with tempfile.TemporaryDirectory() as td:
             'exact_labor_math':abs(labor-EXPECTED_LABOR)<0.01,
             'exact_fee_math':abs(fee-EXPECTED_FEE)<0.01,
             'exact_total_math':abs(actual_total-expected_total)<0.01,
-            'zero_false_high_confidence_dollars':len(false_high)==0,
+            'zero_false_high_confidence_dollars':false_high_dollars==0,
         }
     }
     result['all_pass']=all(result['scores'].values())
