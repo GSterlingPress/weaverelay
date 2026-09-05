@@ -8,6 +8,8 @@ RUN cat /tmp/runtime/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz \
  && tar -xJf /tmp/audit-runtime.tar.xz -C /app \
  && test -f /app/app.py \
  && rm -rf /tmp/runtime /tmp/audit-runtime.tar.xz
+COPY hardening_patch.py /tmp/hardening_patch.py
+RUN python /tmp/hardening_patch.py /app && rm /tmp/hardening_patch.py
 COPY app.py /app/app.py
 RUN python -m py_compile /app/app.py \
  && pip install --no-cache-dir -r requirements.txt \
