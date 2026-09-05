@@ -1,0 +1,40 @@
+name: Audit Zero-Dave Staging Build
+
+on:
+  push:
+    branches:
+      - audit-zero-dave-three-analyzer
+    paths:
+      - 'audit-pilot/source_registry.py'
+      - 'audit-pilot/consensus.py'
+      - 'audit-pilot/financial_catalog.py'
+      - 'audit-pilot/zero_dave_orchestrator.py'
+      - 'audit-pilot/customer_reports.py'
+      - 'audit-pilot/zero_dave_app.py'
+      - 'audit-pilot/Dockerfile.zero-dave'
+      - 'audit-pilot/hardening_patch.py'
+      - 'audit-pilot/overall_factor_patch.py'
+      - '.github/workflows/audit-zero-dave-staging.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build isolated Zero-Dave container
+        run: docker build -f audit-pilot/Dockerfile.zero-dave -t zero-dave-audit:staging audit-pilot
+      - name: Smoke-test health endpoint
+        run: |
+          docker run -d --rm --name zero-dave-test -e PILOT_USERNAME=test -e PILOT_PASSWORD=test -p 18080:8080 zero-dave-audit:staging
+          trap 'docker stop zero-dave-test || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:18080/health > /tmp/health.json; then break; fi
+            sleep 2
+          done
+          cat /tmp/health.json
+          grep -q 'zero-dave-audit' /tmp/health.json
+      - name: Verify private gate
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/)
+          test "$code" = "401"
