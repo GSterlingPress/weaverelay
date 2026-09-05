@@ -1,0 +1,39 @@
+name: Audit final public package
+on:
+  push:
+    branches: [audit-hardening-four-failures]
+    paths:
+      - 'audit-pilot/benchmarks/final_public_package.py'
+      - '.github/workflows/audit-final-public-package.yml'
+  workflow_dispatch:
+jobs:
+  public-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install OCR system dependencies
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr poppler-utils
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+      - name: Apply current narrow hardening
+        run: python audit-pilot/hardening_patch.py /tmp/audit-runtime
+      - name: Install runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Run final real public document package
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: |
+          set -o pipefail
+          python audit-pilot/benchmarks/final_public_package.py | tee final-public-package.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-final-public-package
+          path: final-public-package.json
