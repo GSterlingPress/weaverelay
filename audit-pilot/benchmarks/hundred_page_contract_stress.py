@@ -52,7 +52,7 @@ with tempfile.TemporaryDirectory() as td:
         encoding='utf-8'
     )
 
-    r=run_audit(contract,invoice,evidence_files=[evidence])
+    r=run_audit(contract,invoice,evidence_paths=[evidence])
     rules=r.get('rules',{})
     findings=r.get('findings',[])
     labor=[f for f in findings if f.get('code')=='RATE_MISMATCH']
