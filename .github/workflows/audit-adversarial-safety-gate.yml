@@ -1,0 +1,37 @@
+name: Audit final adversarial safety gate
+on:
+  push:
+    branches: [audit-hardening-four-failures]
+    paths:
+      - 'audit-pilot/benchmarks/adversarial_safety_gate.py'
+      - '.github/workflows/audit-adversarial-safety-gate.yml'
+permissions:
+  contents: read
+jobs:
+  adversarial:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+          test -f /tmp/audit-runtime/audit_engine/pipeline.py
+      - name: Apply four-failure hardening
+        run: python audit-pilot/hardening_patch.py /tmp/audit-runtime
+      - name: Install runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Run adversarial safety gate
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/adversarial_safety_gate.py | tee adversarial-safety-gate.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: audit-adversarial-safety-gate
+          path: adversarial-safety-gate.json
