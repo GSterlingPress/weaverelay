@@ -7,6 +7,13 @@ import sys
 from copy import deepcopy
 from pathlib import Path
 
+# python -I intentionally removes the script directory from sys.path. The packaged
+# analyzer runtime itself is trusted read-only code at /app, so restore only that
+# fixed application root; do not inherit PYTHONPATH or any parent search path.
+_APP_ROOT = "/app"
+if _APP_ROOT not in sys.path:
+    sys.path.insert(0, _APP_ROOT)
+
 
 def _strings(v):
     if isinstance(v, str):
@@ -95,8 +102,6 @@ def main() -> int:
     field = envelope.get("field")
     evidence = list(envelope.get("evidence") or [])
 
-    # The child receives only a deliberately scrubbed environment. No parent secrets,
-    # peer paths, consensus state, expected dollars or prior analyzer state are inherited.
     os.environ.clear()
     os.environ.update({"PYTHONHASHSEED": "0", "ZERO_DAVE_ANALYZER": analyzer})
 
