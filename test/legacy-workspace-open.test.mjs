@@ -21,11 +21,14 @@ test('workspace open failures are no longer silent',()=>{
   assert.ok(app.indexOf('/wr-workspace-open-guard.js')<app.indexOf('/wr-control.js'));
 });
 
-test('hard workspace navigation remains enabled',()=>{
+test('workspace cards use the real openWorkspace path instead of capture-phase hard navigation',()=>{
   const app=read('app.html');
   const nav=read('wr-workspace-navigation.js');
+  const control=read('wr-control.js');
   assert.match(app,/wr-workspace-navigation\.js/);
-  assert.match(nav,/location\.assign\(workspaceHref/);
+  assert.match(control,/b\.onclick=\(\)=>openWorkspace\(b\.dataset\.id\)/);
+  assert.doesNotMatch(nav,/stopImmediatePropagation/);
+  assert.doesNotMatch(nav,/location\.assign\(workspaceHref/);
 });
 
 test('both connect website controls keep a resilient modal-opening path',()=>{
