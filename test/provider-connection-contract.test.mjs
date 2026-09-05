@@ -10,9 +10,9 @@ test('every supported provider has exactly one primary customer connection metho
 });
 
 test('provider method split is complete and non-overlapping',()=>{
-  assert.deepEqual(new Set(OAUTH_PROVIDER_IDS),new Set(['github','railway']));
+  assert.deepEqual(new Set(OAUTH_PROVIDER_IDS),new Set(['github','netlify','railway']));
   assert.deepEqual(new Set(AUTO_DETECT_PROVIDER_IDS),new Set(['comfyui']));
-  assert.deepEqual(new Set(DIRECT_CREDENTIAL_PROVIDER_IDS),new Set(['netlify','supabase','stripe','runpod','vercel','render','cloudflare','neon','resend']));
+  assert.deepEqual(new Set(DIRECT_CREDENTIAL_PROVIDER_IDS),new Set(['supabase','stripe','runpod','vercel','render','cloudflare','neon','resend']));
   assert.equal(DIRECT_CREDENTIAL_PROVIDER_IDS.length+OAUTH_PROVIDER_IDS.length+AUTO_DETECT_PROVIDER_IDS.length,12);
 });
 
