@@ -43,6 +43,25 @@ body{font-family:system-ui;background:#0d1117;color:#e6edf3;margin:0}.w{max-widt
 @app.get("/",response_class=HTMLResponse)
 def home():return HOME
 
+def _preserve_customer_package(work:Path, package:dict)->None:
+    """Delete raw uploads while retaining only generated customer deliverables.
+
+    Generated PDFs/ZIP are copied outside the job directory first so the legacy
+    secure cleanup can remove every raw upload without needing to know new filenames.
+    The machine-readable manifest is deliberately written only after cleanup.
+    """
+    filenames=[package.get("findings_pdf"),package.get("evidence_catalog_pdf"),package.get("original_evidence_archive")]
+    filenames=[str(x) for x in filenames if x]
+    with tempfile.TemporaryDirectory(prefix="zero-dave-deliverables-") as td:
+        safe=Path(td)
+        for name in filenames:
+            src=work/name
+            if not src.exists():raise FileNotFoundError(f"Generated deliverable missing before cleanup: {name}")
+            shutil.copy2(src,safe/name)
+        delete_raw_uploads(work)
+        for name in filenames:
+            shutil.copy2(safe/name,work/name)
+
 @app.post("/zero-dave/audit",response_class=HTMLResponse)
 async def zero_dave_upload(request:Request,contract:UploadFile=File(...),invoice:UploadFile=File(...),field:UploadFile|None=File(None),evidence:list[UploadFile]=File([]),complete_package:str=Form(...),authorization:str=Form(...)):
     if complete_package!="yes" or authorization!="yes":return HTMLResponse("Required affirmations were not accepted.",400)
@@ -56,7 +75,11 @@ async def zero_dave_upload(request:Request,contract:UploadFile=File(...),invoice
         for ef in evidence or []:
             if ef and ef.filename:ep,en=await save_upload_limited(ef,work,EVIDENCE);eps.append(str(ep));original_names[str(ep)]=en
         result=run_zero_dave_audit(contract=str(cp),invoice=str(ip),field=str(fp) if fp else None,evidence=eps,original_names=original_names)
-        result["intake"]={"complete_package_affirmed":True,"authorized":True};package=build_customer_package(result,work);result["customer_package"]=package;write_manifest(result,work/"zero-dave-audit.json");delete_raw_uploads(work)
+        result["intake"]={"complete_package_affirmed":True,"authorized":True}
+        package=build_customer_package(result,work)
+        result["customer_package"]=package
+        _preserve_customer_package(work,package)
+        write_manifest(result,work/"zero-dave-audit.json")
         verified=result["consensus"]["verified_total"];unresolved=result["consensus"]["unresolved_potential_total"]
         links="".join(f"<li><a href='/zero-dave/{token}/download/{html.escape(fname)}'>{html.escape(label)}</a></li>" for label,fname in (("Audit Findings Report PDF",package["findings_pdf"]),("Audit Evidence & Analytical Catalog PDF",package["evidence_catalog_pdf"]),("Original Evidence Archive",package["original_evidence_archive"]),("Machine-readable Audit Manifest","zero-dave-audit.json")))
         body=f"""<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1'><title>Audit complete</title><style>body{{font-family:system-ui;background:#0d1117;color:#e6edf3}}.w{{max-width:850px;margin:45px auto}}.card{{padding:28px;background:#161b22;border:1px solid #30363d;border-radius:16px}}a{{color:#79a7ff}}.n{{font-size:34px;font-weight:800}}.u{{color:#f0b45d}}</style></head><body><div class=w><div class=card><h1>Audit package created</h1><div class=n>${verified:,.2f} verified</div><p class=u>${unresolved:,.2f} unresolved potential — excluded from verified total.</p><p>Audit ID: <b>{html.escape(result['audit_id'])}</b></p><ul>{links}</ul><p>Private staging: verify the generated evidence package before any customer release.</p></div></div></body></html>""";return HTMLResponse(body)
@@ -89,7 +112,9 @@ def staging_self_test(request:Request):
             links=re.findall(r"href='([^']+)'",r.text); audit_match=re.search(r'Audit ID: <b>([^<]+)</b>',r.text)
             manifest_link=next((x for x in links if x.endswith('zero-dave-audit.json')),None)
             if r.status_code!=200 or not manifest_link:return {'ok':False,'post_status':r.status_code,'body':r.text[:1000]}
-            mr=client.get(base+manifest_link); manifest=mr.json()
+            mr=client.get(base+manifest_link)
+            if mr.status_code!=200:return {'ok':False,'post_status':r.status_code,'manifest_status':mr.status_code,'manifest_body':mr.text[:500]}
+            manifest=mr.json()
             downloads={}
             for link in links:
                 dr=client.get(base+link); downloads[Path(link).name]={'status':dr.status_code,'bytes':len(dr.content),'content_type':dr.headers.get('content-type')}
