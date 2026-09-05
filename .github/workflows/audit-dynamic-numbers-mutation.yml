@@ -1,0 +1,35 @@
+name: Audit Dynamic Numbers Mutation
+on:
+  push:
+    branches: [audit-hardening-four-failures]
+    paths:
+      - 'audit-pilot/benchmarks/dynamic_numbers_mutation.py'
+      - '.github/workflows/audit-dynamic-numbers-mutation.yml'
+  workflow_dispatch:
+jobs:
+  mutation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+          test -f /tmp/audit-runtime/audit_engine/pipeline.py
+      - name: Apply four-failure hardening
+        run: python audit-pilot/hardening_patch.py /tmp/audit-runtime
+      - name: Install runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Run dynamic-number mutation benchmark
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/dynamic_numbers_mutation.py | tee dynamic-numbers-mutation.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit-dynamic-numbers-mutation
+          path: dynamic-numbers-mutation.json
