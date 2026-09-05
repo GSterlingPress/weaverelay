@@ -1,0 +1,49 @@
+name: Audit Four-Failure Hardening
+
+on:
+  push:
+    branches:
+      - audit-hardening-four-failures
+
+permissions:
+  contents: read
+
+jobs:
+  replay-all:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct frozen packaged audit runtime
+        run: |
+          mkdir -p /tmp/audit-runtime
+          cat audit-pilot/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz
+          xz --test /tmp/audit-runtime.tar.xz
+          tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
+          test -f /tmp/audit-runtime/audit_engine/pipeline.py
+      - name: Apply only the four benchmark hardening fixes
+        run: python audit-pilot/hardening_patch.py /tmp/audit-runtime
+      - name: Install runtime dependencies
+        run: pip install -r /tmp/audit-runtime/requirements.txt
+      - name: Rerun Broward
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/broward_public_replay.py | tee broward-after.json
+      - name: Rerun EPA
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/epa_public_replay.py | tee epa-after.json
+      - name: Rerun Louisiana
+        env:
+          AUDIT_RUNTIME_DIR: /tmp/audit-runtime
+        run: python audit-pilot/benchmarks/louisiana_public_replay.py | tee louisiana-after.json
+      - name: Upload post-hardening replay outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-four-failure-hardening-results
+          path: |
+            broward-after.json
+            epa-after.json
+            louisiana-after.json
