@@ -73,16 +73,23 @@ def _score_fee(s:str)->int:
 
 def _infer_rules(sentences:list[str])->dict:
     labor=[]; fee=[]
+    # C reasons over short local windows rather than A/B's regex strategy. Contract
+    # clauses routinely put a numeric term in one sentence and its application in
+    # the next, so use 1-2 sentence windows while preserving the originating index.
+    windows=[]
     for idx,s in enumerate(sentences,1):
+        windows.append((idx,s))
+        if idx<len(sentences):windows.append((idx,s+' '+sentences[idx]))
+    for idx,s in windows:
         ls=_score_labor(s)
         if ls>=6:
             nums=[float(x) for x in NUM_RE.findall(s)]
             vals=[x for x in nums if 1.0 < x < 10.0]
-            if vals:labor.append((ls,idx,vals[-1],s))
+            if vals:labor.append((ls,idx,vals[0],s))
         fs=_score_fee(s)
         if fs>=7:
             vals=[float(x) for x in PCT_RE.findall(s)]
-            if vals:fee.append((fs,idx,vals[-1],s))
+            if vals:fee.append((fs,idx,vals[0],s))
     labor.sort(key=lambda x:(x[0],x[1]),reverse=True); fee.sort(key=lambda x:(x[0],x[1]),reverse=True)
     return {
         'labor_multiplier':labor[0][2] if labor else None,'labor_sentence':labor[0][3] if labor else None,'labor_sentence_no':labor[0][1] if labor else None,
@@ -94,7 +101,7 @@ def run_analyzer_c(*,contract:str,invoice:str,field:str|None,evidence:list[str],
     """Independent ledger-first financial engine.
 
     C starts from invoice events, independently reconstructs supporting ledger facts,
-    then scores contract sentences to determine the applicable numeric constraint.
+    then scores contract sentence windows to determine the applicable numeric constraint.
     It never calls Analyzer A/B or audit_engine.
     """
     invoice_rows=_tabular(invoice)
@@ -106,7 +113,6 @@ def run_analyzer_c(*,contract:str,invoice:str,field:str|None,evidence:list[str],
     edocs=[registry.doc_id_for_path(p) for p in evidence if registry.doc_id_for_path(p)]
     findings=[]
 
-    # Ledger-first: create events, then resolve evidence by invoice/date/classification.
     for rowno,row in enumerate(invoice_rows,2):
         iid=str(_pick(row,'invoice_id','invoice','pay_app') or '').strip()
         desc=str(_pick(row,'description','rate_key','classification','type') or '').strip()
