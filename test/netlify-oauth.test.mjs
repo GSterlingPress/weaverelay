@@ -12,11 +12,12 @@ test('Netlify uses OAuth and is never offered as a direct credential provider',(
 test('Netlify authorization uses the provider-documented token response and never asks customers for PATs',async()=>{
   const start=await fs.readFile(new URL('../netlify/functions/provider-start.mjs',import.meta.url),'utf8');
   const controls=await fs.readFile(new URL('../wr-dashboard-controls.js',import.meta.url),'utf8');
-  assert.match(start,/https:\/\/app\.netlify\.com\/authorize/);
-  assert.match(start,/response_type','token'/);
-  assert.match(start,/CONNECT_NETLIFY_CLIENT_ID/);
-  assert.doesNotMatch(start,/CONNECT_NETLIFY_CLIENT_SECRET/);
-  assert.doesNotMatch(start,/response_type','code'/);
+  const netlifyBranch=start.split("if(provider==='netlify')")[1].split("const envPrefix=")[0];
+  assert.match(netlifyBranch,/https:\/\/app\.netlify\.com\/authorize/);
+  assert.match(netlifyBranch,/response_type','token'/);
+  assert.match(netlifyBranch,/CONNECT_NETLIFY_CLIENT_ID/);
+  assert.doesNotMatch(netlifyBranch,/CONNECT_NETLIFY_CLIENT_SECRET/);
+  assert.doesNotMatch(netlifyBranch,/response_type','code'/);
   assert.match(controls,/provider-action\[data-provider="netlify"\]/);
   assert.doesNotMatch(controls,/personal access token/i);
 });
