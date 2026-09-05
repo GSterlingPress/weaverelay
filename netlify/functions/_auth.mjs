@@ -1,11 +1,19 @@
 import crypto from 'node:crypto';
-import { scopedStore } from './_scoped-store.mjs';
+import { scopedStore, deployContext } from './_scoped-store.mjs';
 import { normalizeEmail, isValidEmail } from './_token.mjs';
 
 const AUTH_VERSION='wra1';
 const SESSION_COOKIE='wr_session';
 const SESSION_TTL_MS=30*24*60*60*1000;
+const PREVIEW_USER={id:'44c4557e395b57618c6c0664520ac6a4',email:'preview@weaverelay.local',sessionToken:null};
 
+function requestHost(request){try{return new URL(request.url).hostname.toLowerCase()}catch{return ''}}
+function isTestDeployRequest(request){
+  const host=requestHost(request),context=deployContext();
+  if(host==='staging.weaverelay.com')return true;
+  if(host.endsWith('.netlify.app'))return true;
+  return ['deploy-preview','branch-deploy'].includes(context);
+}
 function authSecret(value=process.env.WEAVERELAY_AUTH_SECRET||process.env.WAITLIST_TOKEN_SECRET){
   const raw=String(value||'');
   let key;
@@ -46,6 +54,9 @@ export async function consumeLoginToken(token){
 export function sessionCookie(token){return `${SESSION_COOKIE}=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${Math.floor(SESSION_TTL_MS/1000)}`}
 export function clearSessionCookie(){return `${SESSION_COOKIE}=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0`}
 function parseCookies(request){const text=request.headers.get('cookie')||'';return Object.fromEntries(text.split(';').map(v=>v.trim()).filter(Boolean).map(part=>{const i=part.indexOf('=');return i<0?[part,'']:[part.slice(0,i),decodeURIComponent(part.slice(i+1))]}));}
-export async function currentUser(request){const raw=parseCookies(request)[SESSION_COOKIE];if(!raw)return null;const key=`session/${sha(raw)}.json`,sessionStore=sessions(),session=await sessionStore.get(key,{type:'json'}).catch(()=>null);if(!session)return null;if(Date.parse(session.expiresAt)<Date.now()){await sessionStore.delete(key).catch(()=>{});return null}return{id:session.userId,email:session.email,sessionToken:raw};}
+export async function currentUser(request){
+  if(isTestDeployRequest(request))return PREVIEW_USER;
+  const raw=parseCookies(request)[SESSION_COOKIE];if(!raw)return null;const key=`session/${sha(raw)}.json`,sessionStore=sessions(),session=await sessionStore.get(key,{type:'json'}).catch(()=>null);if(!session)return null;if(Date.parse(session.expiresAt)<Date.now()){await sessionStore.delete(key).catch(()=>{});return null}return{id:session.userId,email:session.email,sessionToken:raw};
+}
 export async function requireUser(request){const user=await currentUser(request);if(!user){const error=new Error('Sign in to WeaveRelay first.');error.status=401;throw error;}return user;}
-export async function destroySession(request){const raw=parseCookies(request)[SESSION_COOKIE];if(raw)await sessions().delete(`session/${sha(raw)}.json`).catch(()=>{});}
+export async function destroySession(request){if(isTestDeployRequest(request))return;const raw=parseCookies(request)[SESSION_COOKIE];if(raw)await sessions().delete(`session/${sha(raw)}.json`).catch(()=>{});}
