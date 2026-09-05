@@ -30,8 +30,11 @@ jobs:
       - name: Run 100-page stress benchmark
         env:
           AUDIT_RUNTIME_DIR: /tmp/audit-runtime
-        run: python audit-pilot/benchmarks/hundred_page_contract_stress.py | tee hundred-page-stress.json
+        run: |
+          set -o pipefail
+          python audit-pilot/benchmarks/hundred_page_contract_stress.py | tee hundred-page-stress.json
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: audit-hundred-page-stress
           path: hundred-page-stress.json
