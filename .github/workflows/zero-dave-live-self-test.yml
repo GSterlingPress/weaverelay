@@ -1,0 +1,48 @@
+name: Zero-Dave Live Staging Self-Test
+on:
+  push:
+    branches: [audit-zero-dave-three-analyzer]
+    paths:
+      - '.github/workflows/zero-dave-live-self-test.yml'
+      - 'audit-pilot/**'
+  workflow_dispatch:
+
+jobs:
+  live-self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call live staging self-test
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 300 \
+            'https://zero-dave-branch-staging-production.up.railway.app/staging/self-test?token=zdst_6fQ2v9Kx4L8mN1pR' \
+            -o self-test.json
+          cat self-test.json
+      - name: Assert live results
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('self-test.json'))
+          assert r['ok'] is True, r
+          assert r['post_status']==200, r
+          assert r['independence']['shared_deterministic_engine_kernel'] is False, r
+          assert r['independence']['customer_triple_independent_badge_allowed'] is True, r
+          for name in ('A','B','C'):
+              assert name in r['analyzers'], r
+              assert r['analyzers'][name]['findings'], (name,r)
+          expected=68.60
+          amounts=[r['analyzers'][x]['findings'][0]['amount'] for x in ('A','B','C')]
+          assert all(abs(float(a)-expected)<0.011 for a in amounts), amounts
+          assert abs(float(r['verified_total'])-expected)<0.011, r
+          assert abs(float(r['unresolved_total']))<0.011, r
+          assert r['consensus_findings'][0]['state']=='VERIFIED', r
+          assert r['consensus_findings'][0]['divergence_stage'] is None, r
+          for fname in ('Audit-Findings-Report.pdf','Audit-Evidence-Analytical-Catalog.pdf','Audit-Original-Evidence.zip','zero-dave-audit.json'):
+              d=r['downloads'][fname]
+              assert d['status']==200 and d['bytes']>100, (fname,d)
+          print('LIVE_ZERO_DAVE_PASS',json.dumps({'audit_id':r['audit_id'],'verified_total':r['verified_total'],'amounts':amounts,'downloads':r['downloads']},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zero-dave-live-self-test
+          path: self-test.json
