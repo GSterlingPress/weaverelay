@@ -11,23 +11,42 @@ jobs:
   live-self-test:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Prove child-process sealed-room boundary
+        working-directory: audit-pilot
+        run: |
+          set -euo pipefail
+          python process_isolation_probe.py | tee process-isolation.json
+          python - <<'PY'
+          import json
+          r=json.load(open('process-isolation.json'))
+          assert r['ok'] is True, r
+          assert r['policy']=='SEALED_ROOM_V2_CHILD_PROCESS', r
+          pids=[]
+          for name in ('A','B','C'):
+              x=r['analyzers'][name]
+              assert x['peer_marker_visible'] is False, x
+              assert x['peer_file_in_room'] is False, x
+              assert x['source_count']==1, x
+              pids.append(x['pid'])
+          assert len(set(pids))==3, pids
+          print('PROCESS_ISOLATION_PASS',pids)
+          PY
       - name: Check live staging health
         run: |
           set -euo pipefail
-          status=$(curl --silent --show-error --max-time 60 -o health.json -w '%{http_code}' \
-            'https://zero-dave-branch-staging-production.up.railway.app/health')
+          status=$(curl --silent --show-error --max-time 60 -o health.json -w '%{http_code}' 'https://zero-dave-branch-staging-production.up.railway.app/health')
           echo "HEALTH_STATUS=$status"
           cat health.json || true
           test "$status" = "200"
-      - name: Call live staging self-test
+      - name: Call unchanged frozen live staging case
         run: |
           set -euo pipefail
-          status=$(curl --silent --show-error --max-time 300 -o self-test.json -w '%{http_code}' \
-            'https://zero-dave-branch-staging-production.up.railway.app/staging/self-test?token=zdst_6fQ2v9Kx4L8mN1pR')
+          status=$(curl --silent --show-error --max-time 300 -o self-test.json -w '%{http_code}' 'https://zero-dave-branch-staging-production.up.railway.app/staging/self-test?token=zdst_6fQ2v9Kx4L8mN1pR')
           echo "SELF_TEST_STATUS=$status"
           cat self-test.json || true
           test "$status" = "200"
-      - name: Assert live results
+      - name: Assert unchanged frozen $68.60 results and V2 isolation
         run: |
           python - <<'PY'
           import json
@@ -36,11 +55,13 @@ jobs:
           assert r['post_status']==200, r
           assert r['independence']['shared_deterministic_engine_kernel'] is False, r
           assert r['independence']['customer_triple_independent_badge_allowed'] is True, r
+          assert r['independence']['process_level_isolation'] is True, r
+          expected=68.60
+          amounts=[]
           for name in ('A','B','C'):
               assert name in r['analyzers'], r
               assert r['analyzers'][name]['findings'], (name,r)
-          expected=68.60
-          amounts=[r['analyzers'][x]['findings'][0]['amount'] for x in ('A','B','C')]
+              amounts.append(r['analyzers'][name]['findings'][0]['amount'])
           assert all(abs(float(a)-expected)<0.011 for a in amounts), amounts
           assert abs(float(r['verified_total'])-expected)<0.011, r
           assert abs(float(r['unresolved_total']))<0.011, r
@@ -49,13 +70,14 @@ jobs:
           for fname in ('Audit-Findings-Report.pdf','Audit-Evidence-Analytical-Catalog.pdf','Audit-Original-Evidence.zip','zero-dave-audit.json'):
               d=r['downloads'][fname]
               assert d['status']==200 and d['bytes']>100, (fname,d)
-          print('LIVE_ZERO_DAVE_PASS',json.dumps({'audit_id':r['audit_id'],'verified_total':r['verified_total'],'amounts':amounts,'downloads':r['downloads']},indent=2))
+          print('LIVE_ZERO_DAVE_V2_PASS',json.dumps({'audit_id':r['audit_id'],'verified_total':r['verified_total'],'amounts':amounts},indent=2))
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: zero-dave-live-self-test
           path: |
+            audit-pilot/process-isolation.json
             health.json
             self-test.json
           if-no-files-found: ignore
