@@ -16,11 +16,9 @@ jobs:
           tar -xJf /tmp/audit-runtime.tar.xz -C /tmp/audit-runtime
       - name: Print relevant extraction source
         run: |
+          echo '=== ingest.py ==='
+          sed -n '1,320p' /tmp/audit-runtime/audit_engine/ingest.py
+          echo '=== vision_ocr.py ==='
+          sed -n '1,360p' /tmp/audit-runtime/audit_engine/vision_ocr.py
           echo '=== pipeline.py ==='
-          sed -n '1,260p' /tmp/audit-runtime/audit_engine/pipeline.py
-          echo '=== extract.py ==='
-          sed -n '1,360p' /tmp/audit-runtime/audit_engine/extract.py
-          echo '=== document_intelligence.py ==='
-          sed -n '1,320p' /tmp/audit-runtime/audit_engine/document_intelligence.py
-          echo '=== ocr_adapter.py ==='
-          sed -n '1,320p' /tmp/audit-runtime/audit_engine/ocr_adapter.py
+          sed -n '1,180p' /tmp/audit-runtime/audit_engine/pipeline.py
