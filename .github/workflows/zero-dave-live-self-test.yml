@@ -11,13 +11,22 @@ jobs:
   live-self-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Check live staging health
+        run: |
+          set -euo pipefail
+          status=$(curl --silent --show-error --max-time 60 -o health.json -w '%{http_code}' \
+            'https://zero-dave-branch-staging-production.up.railway.app/health')
+          echo "HEALTH_STATUS=$status"
+          cat health.json || true
+          test "$status" = "200"
       - name: Call live staging self-test
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --max-time 300 \
-            'https://zero-dave-branch-staging-production.up.railway.app/staging/self-test?token=zdst_6fQ2v9Kx4L8mN1pR' \
-            -o self-test.json
-          cat self-test.json
+          status=$(curl --silent --show-error --max-time 300 -o self-test.json -w '%{http_code}' \
+            'https://zero-dave-branch-staging-production.up.railway.app/staging/self-test?token=zdst_6fQ2v9Kx4L8mN1pR')
+          echo "SELF_TEST_STATUS=$status"
+          cat self-test.json || true
+          test "$status" = "200"
       - name: Assert live results
         run: |
           python - <<'PY'
@@ -43,6 +52,10 @@ jobs:
           print('LIVE_ZERO_DAVE_PASS',json.dumps({'audit_id':r['audit_id'],'verified_total':r['verified_total'],'amounts':amounts,'downloads':r['downloads']},indent=2))
           PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: zero-dave-live-self-test
-          path: self-test.json
+          path: |
+            health.json
+            self-test.json
+          if-no-files-found: ignore
