@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PORT=8080
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils xz-utils ca-certificates coreutils && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr poppler-utils xz-utils ca-certificates coreutils bubblewrap procps && rm -rf /var/lib/apt/lists/*
 COPY runtime.00 runtime.01 runtime.02 runtime.03 runtime.04 runtime.05 runtime.06 runtime.07 /tmp/runtime/
 RUN cat /tmp/runtime/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz \
  && xz --test /tmp/audit-runtime.tar.xz \
@@ -12,10 +12,10 @@ COPY hardening_patch.py /tmp/hardening_patch.py
 RUN python /tmp/hardening_patch.py /app && rm /tmp/hardening_patch.py
 COPY overall_factor_patch.py /tmp/overall_factor_patch.py
 RUN python /tmp/overall_factor_patch.py /app && rm /tmp/overall_factor_patch.py
-COPY source_registry.py consensus.py financial_catalog.py analyzer_b.py analyzer_c.py sealed_room.py zero_dave_process_worker.py reanalysis.py zero_dave_orchestrator.py customer_reports.py zero_dave_app.py reanalysis_child_process_gate.py /app/
+COPY source_registry.py consensus.py financial_catalog.py analyzer_b.py analyzer_c.py sealed_room.py zero_dave_process_worker.py reanalysis.py zero_dave_orchestrator.py customer_reports.py zero_dave_app.py reanalysis_child_process_gate.py sandbox_escape_probe.py /app/
 RUN pip install --no-cache-dir -r requirements.txt \
  && pip install --no-cache-dir reportlab pillow pillow-heif extract-msg pypdf openpyxl httpx \
- && python -m py_compile /app/source_registry.py /app/consensus.py /app/financial_catalog.py /app/analyzer_b.py /app/analyzer_c.py /app/sealed_room.py /app/zero_dave_process_worker.py /app/reanalysis.py /app/zero_dave_orchestrator.py /app/customer_reports.py /app/zero_dave_app.py \
+ && python -m py_compile /app/source_registry.py /app/consensus.py /app/financial_catalog.py /app/analyzer_b.py /app/analyzer_c.py /app/sealed_room.py /app/zero_dave_process_worker.py /app/reanalysis.py /app/zero_dave_orchestrator.py /app/customer_reports.py /app/zero_dave_app.py /app/sandbox_escape_probe.py \
  && useradd --create-home --uid 10001 audituser \
  && mkdir -p /tmp/contract-money-audit-jobs \
  && chown -R audituser:audituser /app /tmp/contract-money-audit-jobs
