@@ -76,36 +76,47 @@ def _canon(v:Any)->str:
     except Exception:pass
     return str(v).strip()
 
+def _known_invoice_ids(ts:list[AnalyzerTrace])->set[str]:
+    out=set()
+    for t in ts:
+        v=t.invoice_identity or {}
+        iid=str(v.get('invoice_id') or '').strip() if isinstance(v,dict) else str(v or '').strip()
+        if iid:out.add(iid)
+    return out
+
 def first_divergence(traces:Iterable[AnalyzerTrace])->str|None:
     ts=list(traces)
     if len(ts)!=3 or {t.analyzer for t in ts}!={'A','B','C'}:return 'missing-analyzer'
-    stages=(('classification',lambda t:t.status),('rule-kind',lambda t:t.rule_kind),('contract-rule',lambda t:t.rule),('invoice-identity',lambda t:t.invoice_identity),('formula',lambda t:t.formula_id or t.formula),('inputs',lambda t:t.inputs),('amount',lambda t:t.amount))
+    stages=(('classification',lambda t:t.status),('rule-kind',lambda t:t.rule_kind),('contract-rule',lambda t:t.rule),('formula',lambda t:t.formula_id or t.formula),('inputs',lambda t:t.inputs),('amount',lambda t:t.amount))
     for name,getter in stages:
         vals=[_canon(getter(t)) for t in ts]
         if len(set(vals))!=1:return name
+    # Source-local invoice IDs are useful corroboration, but one engine may legitimately
+    # omit the label while reconstructing the exact same financial event. Missing is not
+    # disagreement; two different non-empty IDs are.
+    if len(_known_invoice_ids(ts))>1:return 'invoice-identity'
     return None
 
 def _compatible(a:AnalyzerTrace,b:AnalyzerTrace)->bool:
-    if a.finding_key!=b.finding_key:return False
     if a.rule_kind and b.rule_kind and a.rule_kind!=b.rule_kind:return False
     if a.formula_id and b.formula_id and a.formula_id!=b.formula_id:return False
-    return abs(a.amount-b.amount)<=MONEY_TOLERANCE
+    ai=_known_invoice_ids([a]); bi=_known_invoice_ids([b])
+    if ai and bi and ai!=bi:return False
+    if abs(a.amount-b.amount)>MONEY_TOLERANCE:return False
+    # Primary identity remains the engine's own stable key. When independently built
+    # engines serialize identity differently, permit pairing only if the full canonical
+    # financial input vector is identical. This does not authorize money: every trace
+    # stage is still checked after the three-way cluster is formed.
+    if a.finding_key==b.finding_key:return True
+    return _canon(a.inputs)==_canon(b.inputs) and bool(_canon(a.inputs))
 
 def _clusters(analyzer_results:dict[str,dict])->list[list[AnalyzerTrace]]:
-    """Pair independent findings before comparing their traces.
-
-    Description prose is deliberately excluded from financial identity because each
-    engine may describe the same invoice line differently. For repeated same-code
-    findings in one invoice, amount/formula/rule kind are used to form one-per-engine
-    clusters; unmatched traces remain separate and therefore fail closed.
-    """
     all_traces={a:[trace_from_finding(a,f) for f in r.get('findings',[]) or []] for a,r in analyzer_results.items()}
     clusters=[]
     for analyzer in ('A','B','C'):
         for t in all_traces.get(analyzer,[]):
             choices=[c for c in clusters if analyzer not in {x.analyzer for x in c} and c and _compatible(c[0],t)]
             if choices:
-                # Prefer closest dollar amount if there are repeated findings.
                 choices.sort(key=lambda c:abs(c[0].amount-t.amount)); choices[0].append(t)
             else:clusters.append([t])
     return clusters
