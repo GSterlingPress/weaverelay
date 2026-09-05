@@ -12,10 +12,10 @@ COPY hardening_patch.py /tmp/hardening_patch.py
 RUN python /tmp/hardening_patch.py /app && rm /tmp/hardening_patch.py
 COPY overall_factor_patch.py /tmp/overall_factor_patch.py
 RUN python /tmp/overall_factor_patch.py /app && rm /tmp/overall_factor_patch.py
-COPY source_registry.py consensus.py financial_catalog.py zero_dave_orchestrator.py customer_reports.py zero_dave_app.py /app/
+COPY source_registry.py consensus.py financial_catalog.py analyzer_b.py analyzer_c.py zero_dave_orchestrator.py customer_reports.py zero_dave_app.py /app/
 RUN pip install --no-cache-dir -r requirements.txt \
- && pip install --no-cache-dir reportlab pillow pillow-heif extract-msg pypdf openpyxl \
- && python -m py_compile /app/source_registry.py /app/consensus.py /app/financial_catalog.py /app/zero_dave_orchestrator.py /app/customer_reports.py /app/zero_dave_app.py \
+ && pip install --no-cache-dir reportlab pillow pillow-heif extract-msg pypdf openpyxl httpx \
+ && python -m py_compile /app/source_registry.py /app/consensus.py /app/financial_catalog.py /app/analyzer_b.py /app/analyzer_c.py /app/zero_dave_orchestrator.py /app/customer_reports.py /app/zero_dave_app.py \
  && useradd --create-home --uid 10001 audituser \
  && mkdir -p /tmp/contract-money-audit-jobs \
  && chown -R audituser:audituser /app /tmp/contract-money-audit-jobs
