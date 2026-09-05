@@ -31,6 +31,12 @@ with tempfile.TemporaryDirectory() as td:
     resolved=run_audit(contract,invoice,evidence_paths=[evidence])
     def high_over(r):
         return round(sum(float(f.get('amount',0) or 0) for f in r.get('findings',[]) if f.get('confidence')=='HIGH' and f.get('status')=='OVERBILLED'),2)
+    checks={
+        'initially_keeps_documentation_dollars_out_of_overbilling': high_over(initial)==0.0,
+        'initially_surfaces_documentation_gap_as_unsupported': abs(float(initial.get('totals',{}).get('unsupported',0))-5587.0)<0.01,
+        'matching_support_clears_documentation_exception': abs(float(resolved.get('totals',{}).get('unsupported',0)))<0.01,
+        'resolved_stage_has_zero_high_confidence_overbilling': high_over(resolved)==0.0
+    }
     result={
       'benchmark':'Louisiana Legislative Auditor LLT Home Demolition structural evidence-resolution replay',
       'public_ground_truth':{
@@ -53,11 +59,9 @@ with tempfile.TemporaryDirectory() as td:
         'evidence_matching':resolved.get('evidence',{}).get('matching'),
         'false_high_confidence_overbilling_dollars':high_over(resolved)
       },
-      'capability_questions':{
-        'initially_keeps_documentation_dollars_out_of_overbilling': high_over(initial)==0.0,
-        'initially_surfaces_documentation_gap_as_unsupported': abs(float(initial.get('totals',{}).get('unsupported',0))-5587.0)<0.01,
-        'matching_support_clears_documentation_exception': abs(float(resolved.get('totals',{}).get('unsupported',0)))<0.01,
-        'resolved_stage_has_zero_high_confidence_overbilling': high_over(resolved)==0.0
-      }
+      'capability_questions':checks,
+      'all_pass':all(checks.values())
     }
     print(json.dumps(result,indent=2))
+    if not result['all_pass']:
+        raise SystemExit(1)
