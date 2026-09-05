@@ -6,6 +6,7 @@ from typing import Any
 import hashlib
 import json
 import os
+import secrets
 import shutil
 import subprocess
 import sys
@@ -54,11 +55,13 @@ def make_sealed_evidence(contract: str, invoice: str, field: str | None, evidenc
 
 
 def run_sealed_process(analyzer_name: str, *, audit_id: str, contract: str, invoice: str, field: str | None, evidence: list[str]) -> dict:
-    """Execute one analyzer in a fresh OS child process.
+    """Execute one analyzer as a memoryless fresh analysis of original evidence.
 
-    Only byte-identical private source copies and analyzer identity cross the process boundary.
-    The child gets a scrubbed environment. Peer outputs/catalogs, consensus state, disagreement
-    hints, expected dollars and prior analyzer results are never placed in its room or envelope.
+    The parent audit_id is intentionally NOT disclosed to the child. Every invocation gets
+    a new opaque run identity, generic source filenames, a fresh private directory, a fresh
+    interpreter and a scrubbed environment. The only substantive inputs are byte-identical
+    copies of the original customer documents. Prior passes and peer outputs never enter the
+    room or envelope. The caller/consensus layer alone retains job and pass history.
     """
     app_root = Path(__file__).parent.resolve()
     worker = app_root / 'zero_dave_process_worker.py'
@@ -67,9 +70,12 @@ def run_sealed_process(analyzer_name: str, *, audit_id: str, contract: str, invo
         sealed = make_sealed_evidence(contract, invoice, field, evidence, room)
         input_path = room / 'INPUT.json'
         output_path = room / 'COMMITTED.json'
+        # Never expose the persistent customer/job identity to an analyzer. A rerun must
+        # be indistinguishable at its input boundary from a first analysis of new material.
+        opaque_run_id = f'RUN-{secrets.token_hex(16)}'
         envelope = {
             'analyzer': analyzer_name,
-            'audit_id': audit_id,
+            'audit_id': opaque_run_id,
             'contract': sealed.contract,
             'invoice': sealed.invoice,
             'field': sealed.field,
@@ -103,11 +109,14 @@ def run_sealed_process(analyzer_name: str, *, audit_id: str, contract: str, invo
         'analyzer': analyzer_name,
         'process_boundary': 'fresh OS child process',
         'child_pid_isolated': child_pid_isolated,
+        'persistent_audit_identity_available': False,
+        'prior_pass_identity_available': False,
         'peer_outputs_available': False,
         'peer_catalogs_available': False,
         'consensus_available': False,
         'disagreement_hints_available': False,
         'prior_peer_results_available': False,
+        'prior_self_results_available': False,
         'parent_environment_inherited': False,
         'source_policy': 'private byte-identical copies of original customer evidence only',
     }
@@ -116,12 +125,15 @@ def run_sealed_process(analyzer_name: str, *, audit_id: str, contract: str, invo
 
 def isolation_attestation(results: dict[str, dict], fingerprints: dict[str, str]) -> dict[str, Any]:
     return {
-        'policy': 'SEALED_ROOM_V2_CHILD_PROCESS',
+        'policy': 'SEALED_ROOM_V3_MEMORYLESS_CHILD_PROCESS',
         'same_original_evidence_fingerprints': sorted(fingerprints.keys()),
         'analyzers': {
             k: {
                 'committed_before_consensus': True,
                 'fresh_os_child_process': True,
+                'persistent_audit_identity_available': False,
+                'prior_pass_identity_available': False,
+                'prior_self_results_available': False,
                 'parent_environment_inherited': False,
                 'peer_outputs_available': False,
                 'peer_catalogs_available': False,
@@ -130,5 +142,5 @@ def isolation_attestation(results: dict[str, dict], fingerprints: dict[str, str]
             } for k in ('A', 'B', 'C') if k in results
         },
         'consensus_is_only_cross_analyzer_reader': True,
-        'reananalysis_policy': 'fresh child process and fresh sealed room from original evidence only; no peer answer, amount, rule, location, or disagreement clue may be supplied',
+        'reananalysis_policy': 'every invocation is a fresh memoryless analysis from byte-identical original evidence; only consensus retains job/pass history; no prior self/peer answer, amount, rule, location, identity, or disagreement clue may be supplied',
     }
