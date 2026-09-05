@@ -11,9 +11,9 @@ def main():
     with tempfile.TemporaryDirectory() as td:
         p=Path(td)
         contract=p/'contract.txt'; invoice=p/'invoice.csv'; evidence=p/'payroll.csv'
-        contract.write_text('Labor shall be billed using an overall multiplier factor of 2.417 applied to actual hourly payroll labor rates.',encoding='utf-8')
-        invoice.write_text('invoice_id,description,hours,rate\nLIVE-1,Field Engineer,7.5,84.75\n',encoding='utf-8')
-        evidence.write_text('description,hourly_rate\nField Engineer,31.28\n',encoding='utf-8')
+        contract.write_text('Commercial labor billing clause. Overall multiplier of 2.417. The multiplier is applied to the actual hourly labor rate paid to employees to determine the invoiced billing rate.',encoding='utf-8')
+        invoice.write_text('invoice_id,rate_key,hours,rate,amount,vendor,service_date,description\nLIVE-1,Field Engineer,7.5,84.75,635.625,Live Test Vendor,2026-09-01,Field Engineer\n',encoding='utf-8')
+        evidence.write_text('invoice_id,classification,hours,rate,service_date,description\nLIVE-1,Field Engineer,7.5,31.28,2026-09-01,Payroll register actual hourly rate\n',encoding='utf-8')
         kw=dict(audit_id='REAL-CHILD-REANALYSIS',contract=str(contract),invoice=str(invoice),field=None,evidence=[str(evidence)])
 
         # Real initial child-process outputs. No mocks and no in-process analyzers.
