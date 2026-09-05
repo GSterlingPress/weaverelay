@@ -40,23 +40,17 @@ def materiality_policy(amount:Decimal)->tuple[str,int]:
 def finding_key(finding:dict)->str:
     z=finding.get('_zero_dave_trace') or {}
     iid=str(z.get('invoice_id') or finding.get('invoice_id') or finding.get('invoice') or '').strip()
-    desc=str(z.get('description') or finding.get('description') or '').strip()
     code=str(finding.get('code') or z.get('formula_id') or '').strip()
-    if iid and code:return f'{iid}|{desc}|{code}'
-    for keys in (('invoice_id','line_id','code'),('invoice','line','code'),('description','code','status')):
-        vals=[str(finding.get(k,'')).strip() for k in keys]
-        if vals and all(vals):return '|'.join(vals)
-    return '|'.join(str(finding.get(k,'')).strip() for k in ('code','status','description','vendor','date'))
+    line=str(finding.get('line_id') or finding.get('line') or '').strip()
+    if iid and code and line:return f'{iid}|{line}|{code}'
+    if iid and code:return f'{iid}|{code}'
+    desc=str(z.get('description') or finding.get('description') or '').strip()
+    return '|'.join(x for x in (iid,line,code,desc,str(finding.get('status') or '')) if x)
 
 def _canonical_inputs(v:Any)->Any:
     if not isinstance(v,dict):return v
-    aliases={
-        'billed_rate':('billed_rate','rate','invoice_rate'), 'payroll_rate':('payroll_rate','actual_rate','evidence_rate'),
-        'multiplier':('multiplier','payroll_multiplier'), 'hours':('hours','quantity','qty'),
-        'base_cost':('base_cost','subcontractor_base_cost','subcontractor_cost'), 'billed_pct':('billed_pct','markup_pct','fee_pct'), 'cap_pct':('cap_pct','markup_cap_pct','fee_cap_pct')
-    }
-    low={str(k).lower():val for k,val in v.items()}
-    out={}
+    aliases={'billed_rate':('billed_rate','rate','invoice_rate'),'payroll_rate':('payroll_rate','actual_rate','evidence_rate'),'multiplier':('multiplier','payroll_multiplier'),'hours':('hours','quantity','qty'),'base_cost':('base_cost','subcontractor_base_cost','subcontractor_cost'),'billed_pct':('billed_pct','markup_pct','fee_pct'),'cap_pct':('cap_pct','markup_cap_pct','fee_cap_pct')}
+    low={str(k).lower():val for k,val in v.items()}; out={}
     for canon,names in aliases.items():
         for n in names:
             if n in low and low[n] not in (None,''):
@@ -71,45 +65,55 @@ def trace_from_finding(analyzer:str,finding:dict)->AnalyzerTrace:
     formula=z.get('formula_id',finding.get('formula') or finding.get('calculation') or finding.get('math'))
     inputs=_canonical_inputs(z.get('inputs',finding.get('inputs') or finding.get('values') or finding.get('details')))
     iid=z.get('invoice_id') or finding.get('invoice_id') or finding.get('invoice')
-    desc=z.get('description') or finding.get('description')
-    return AnalyzerTrace(
-        analyzer=analyzer,finding_key=finding_key(finding),status=str(finding.get('status') or 'UNKNOWN'),amount=_money(finding.get('amount')),
-        rule=rule,rule_source=finding.get('rule_source') or finding.get('contract_source') or finding.get('source'),
-        invoice_source=finding.get('invoice_source') or finding.get('invoice_ref') or finding.get('line_source'),
-        evidence_source=finding.get('evidence_source') or finding.get('evidence') or finding.get('matched_evidence'),
-        formula=formula,inputs=inputs,confidence=str(finding.get('confidence') or 'UNKNOWN'),raw_finding=finding,
-        rule_kind=str(z.get('rule_kind') or finding.get('code') or ''),formula_id=str(z.get('formula_id') or finding.get('code') or ''),
-        invoice_identity={'invoice_id':str(iid or ''),'description':str(desc or '')}
-    )
+    return AnalyzerTrace(analyzer=analyzer,finding_key=finding_key(finding),status=str(finding.get('status') or 'UNKNOWN'),amount=_money(finding.get('amount')),rule=rule,rule_source=finding.get('rule_source') or finding.get('contract_source') or finding.get('source'),invoice_source=finding.get('invoice_source') or finding.get('invoice_ref') or finding.get('line_source'),evidence_source=finding.get('evidence_source') or finding.get('evidence') or finding.get('matched_evidence'),formula=formula,inputs=inputs,confidence=str(finding.get('confidence') or 'UNKNOWN'),raw_finding=finding,rule_kind=str(z.get('rule_kind') or finding.get('code') or ''),formula_id=str(z.get('formula_id') or finding.get('code') or ''),invoice_identity={'invoice_id':str(iid or '')})
 
 def _canon(v:Any)->str:
     if v is None:return ''
     if isinstance(v,Decimal):return str(v.quantize(MONEY_TOLERANCE))
     if isinstance(v,(dict,list,tuple)):return json.dumps(v,sort_keys=True,default=str,separators=(',',':'))
+    try:
+        if isinstance(v,float):return f'{v:.10g}'
+    except Exception:pass
     return str(v).strip()
 
 def first_divergence(traces:Iterable[AnalyzerTrace])->str|None:
     ts=list(traces)
-    if {t.analyzer for t in ts}!={'A','B','C'}:return 'missing-analyzer'
-    stages=(
-        ('classification',lambda t:t.status),('rule-kind',lambda t:t.rule_kind),('contract-rule',lambda t:t.rule),
-        ('invoice-identity',lambda t:t.invoice_identity),('formula',lambda t:t.formula_id or t.formula),
-        ('inputs',lambda t:t.inputs),('amount',lambda t:t.amount)
-    )
+    if len(ts)!=3 or {t.analyzer for t in ts}!={'A','B','C'}:return 'missing-analyzer'
+    stages=(('classification',lambda t:t.status),('rule-kind',lambda t:t.rule_kind),('contract-rule',lambda t:t.rule),('invoice-identity',lambda t:t.invoice_identity),('formula',lambda t:t.formula_id or t.formula),('inputs',lambda t:t.inputs),('amount',lambda t:t.amount))
     for name,getter in stages:
         vals=[_canon(getter(t)) for t in ts]
         if len(set(vals))!=1:return name
     return None
 
+def _compatible(a:AnalyzerTrace,b:AnalyzerTrace)->bool:
+    if a.finding_key!=b.finding_key:return False
+    if a.rule_kind and b.rule_kind and a.rule_kind!=b.rule_kind:return False
+    if a.formula_id and b.formula_id and a.formula_id!=b.formula_id:return False
+    return abs(a.amount-b.amount)<=MONEY_TOLERANCE
+
+def _clusters(analyzer_results:dict[str,dict])->list[list[AnalyzerTrace]]:
+    """Pair independent findings before comparing their traces.
+
+    Description prose is deliberately excluded from financial identity because each
+    engine may describe the same invoice line differently. For repeated same-code
+    findings in one invoice, amount/formula/rule kind are used to form one-per-engine
+    clusters; unmatched traces remain separate and therefore fail closed.
+    """
+    all_traces={a:[trace_from_finding(a,f) for f in r.get('findings',[]) or []] for a,r in analyzer_results.items()}
+    clusters=[]
+    for analyzer in ('A','B','C'):
+        for t in all_traces.get(analyzer,[]):
+            choices=[c for c in clusters if analyzer not in {x.analyzer for x in c} and c and _compatible(c[0],t)]
+            if choices:
+                # Prefer closest dollar amount if there are repeated findings.
+                choices.sort(key=lambda c:abs(c[0].amount-t.amount)); choices[0].append(t)
+            else:clusters.append([t])
+    return clusters
+
 def build_consensus(analyzer_results:dict[str,dict])->dict:
-    grouped={}
-    for analyzer,result in analyzer_results.items():
-        for f in result.get('findings',[]) or []:
-            t=trace_from_finding(analyzer,f); grouped.setdefault(t.finding_key,[]).append(t)
-    findings=[]; verified_total=Decimal('0.00'); unresolved_total=Decimal('0.00')
-    for idx,(key,traces) in enumerate(sorted(grouped.items()),1):
-        amounts=[t.amount for t in traces]; potential=max([abs(a) for a in amounts],default=Decimal('0.00'))
-        band,budget=materiality_policy(potential); divergence=first_divergence(traces); complete={t.analyzer for t in traces}=={'A','B','C'}
+    clusters=_clusters(analyzer_results); findings=[]; verified_total=Decimal('0.00'); unresolved_total=Decimal('0.00')
+    for idx,traces in enumerate(clusters,1):
+        amounts=[t.amount for t in traces]; potential=max([abs(a) for a in amounts],default=Decimal('0.00')); band,budget=materiality_policy(potential); divergence=first_divergence(traces); complete=len(traces)==3 and {t.analyzer for t in traces}=={'A','B','C'}
         if complete and divergence is None:
             amount=traces[0].amount; state='VERIFIED'; note='All three independent financial-engine traces agree at every compared stage.'
             if amount>0:verified_total+=amount
