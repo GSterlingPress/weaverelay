@@ -1,137 +1,31 @@
 import crypto from 'node:crypto';
 import { getStore } from '@netlify/blobs';
 
-const BRANCH = 'nfl-memory-sample-v1';
-const ROOT = `https://raw.githubusercontent.com/GSterlingPress/weaverelay/${BRANCH}/experiments/nfl-memory-contamination-v1`;
-const LOCK = Object.freeze({
-  sample: '9fd340caab5d273f9ec1b3124bf9d11153e7d81ade7341b2990ab9d5da63c479',
-  prompt: 'aa7829b8c9f40b860bbd35f58623b2ff6bd0b1600b886b174e25cd18d34d19d6',
-  schema: '7a2501ea3d422142942b9ab8a5e7c5fea7f37a06dbcacfcb3fbf4eb545070f9d',
-  model: 'gpt-5.6-sol'
-});
-const sha256 = s => crypto.createHash('sha256').update(s, 'utf8').digest('hex');
-const fail = (message, status = 409) => Response.json({ ok:false, sealed:false, error:message }, { status });
+const BRANCH='nfl-memory-sample-v1';
+const ROOT=`https://raw.githubusercontent.com/GSterlingPress/weaverelay/${BRANCH}/experiments/nfl-memory-contamination-v1`;
+const LOCK=Object.freeze({sample:'9fd340caab5d273f9ec1b3124bf9d11153e7d81ade7341b2990ab9d5da63c479',prompt:'aa7829b8c9f40b860bbd35f58623b2ff6bd0b1600b886b174e25cd18d34d19d6',schema:'7a2501ea3d422142942b9ab8a5e7c5fea7f37a06dbcacfcb3fbf4eb545070f9d',model:'gpt-5.6-sol'});
+const sha256=s=>crypto.createHash('sha256').update(s,'utf8').digest('hex');
+const fail=(error,status=409,extra={})=>Response.json({ok:false,error,...extra},{status});
 
-async function lockedText(name, expected) {
-  const r = await fetch(`${ROOT}/${name}`, { cache:'no-store' });
-  if (!r.ok) throw new Error(`LOCK_SOURCE_UNAVAILABLE:${name}:${r.status}`);
-  const text = await r.text();
-  if (sha256(text) !== expected) throw new Error(`LOCK_HASH_MISMATCH:${name}`);
-  return text;
-}
+async function lockedText(name,expected){const r=await fetch(`${ROOT}/${name}`,{cache:'no-store'});if(!r.ok)throw new Error(`LOCK_SOURCE_UNAVAILABLE:${name}:${r.status}`);const t=await r.text();if(sha256(t)!==expected)throw new Error(`LOCK_HASH_MISMATCH:${name}`);return t;}
+function validateSample(a){if(!Array.isArray(a)||a.length!==100)throw new Error('SAMPLE_NOT_100');const ids=new Set(),counts=new Map();for(const g of a){if(Object.keys(g).sort().join(',')!=='game_id,season,team_1,team_2,week')throw new Error(`SAMPLE_FIELD_VIOLATION:${g.game_id??'?'}`);if(ids.has(g.game_id))throw new Error(`DUPLICATE_GAME:${g.game_id}`);ids.add(g.game_id);if(g.season<2011||g.season>2025)throw new Error(`SEASON_VIOLATION:${g.game_id}`);const mw=g.season<=2020?17:18;if(!Number.isInteger(g.week)||g.week<1||g.week>mw)throw new Error(`REGULAR_SEASON_VIOLATION:${g.game_id}`);if(!g.team_1||!g.team_2||g.team_1===g.team_2)throw new Error(`TEAM_VIOLATION:${g.game_id}`);counts.set(g.season,(counts.get(g.season)??0)+1);}for(let y=2011;y<=2025;y++)if(![6,7].includes(counts.get(y)))throw new Error(`STRATIFICATION_VIOLATION:${y}`);}
+function validateOutput(p,s){if(!p||!Array.isArray(p.results)||p.results.length!==100||Object.keys(p).sort().join(',')!=='results')throw new Error('OUTPUT_SHAPE_VIOLATION');for(let i=0;i<100;i++){const r=p.results[i],g=s[i];if(!r||Object.keys(r).sort().join(',')!=='confidence,game_id,remember,score,winner')throw new Error(`OUTPUT_FIELD_VIOLATION:${i}`);if(r.game_id!==g.game_id)throw new Error(`OUTPUT_ORDER_OR_ID_VIOLATION:${i}`);if(!['YES','MAYBE','NO'].includes(r.remember))throw new Error(`REMEMBER_VIOLATION:${g.game_id}`);if(![g.team_1,g.team_2].includes(r.winner))throw new Error(`WINNER_VIOLATION:${g.game_id}`);if(!Number.isInteger(r.confidence)||r.confidence<0||r.confidence>100)throw new Error(`CONFIDENCE_VIOLATION:${g.game_id}`);if(r.score!=='UNKNOWN'){const esc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');if(!new RegExp(`^${esc(g.team_1)} (0|[1-9]\\d*)-(0|[1-9]\\d*) ${esc(g.team_2)}$`).test(r.score))throw new Error(`SCORE_FORMAT_VIOLATION:${g.game_id}`);}}}
 
-function validateSample(sample) {
-  if (!Array.isArray(sample) || sample.length !== 100) throw new Error('SAMPLE_NOT_100');
-  const ids = new Set();
-  const counts = new Map();
-  for (const g of sample) {
-    const keys = Object.keys(g).sort().join(',');
-    if (keys !== 'game_id,season,team_1,team_2,week') throw new Error(`SAMPLE_FIELD_VIOLATION:${g.game_id ?? '?'}`);
-    if (ids.has(g.game_id)) throw new Error(`DUPLICATE_GAME:${g.game_id}`);
-    ids.add(g.game_id);
-    if (g.season < 2011 || g.season > 2025) throw new Error(`SEASON_VIOLATION:${g.game_id}`);
-    const maxWeek = g.season <= 2020 ? 17 : 18;
-    if (!Number.isInteger(g.week) || g.week < 1 || g.week > maxWeek) throw new Error(`REGULAR_SEASON_VIOLATION:${g.game_id}`);
-    if (!g.team_1 || !g.team_2 || g.team_1 === g.team_2) throw new Error(`TEAM_VIOLATION:${g.game_id}`);
-    counts.set(g.season, (counts.get(g.season) ?? 0) + 1);
-  }
-  for (let y=2011; y<=2025; y++) if (![6,7].includes(counts.get(y))) throw new Error(`STRATIFICATION_VIOLATION:${y}`);
-}
-
-function validateOutput(parsed, sample) {
-  if (!parsed || !Array.isArray(parsed.results) || parsed.results.length !== 100) throw new Error('OUTPUT_NOT_100');
-  if (Object.keys(parsed).sort().join(',') !== 'results') throw new Error('OUTPUT_TOPLEVEL_FIELD_VIOLATION');
-  for (let i=0; i<100; i++) {
-    const r = parsed.results[i], g = sample[i];
-    if (!r || Object.keys(r).sort().join(',') !== 'confidence,game_id,remember,score,winner') throw new Error(`OUTPUT_FIELD_VIOLATION:${i}`);
-    if (r.game_id !== g.game_id) throw new Error(`OUTPUT_ORDER_OR_ID_VIOLATION:${i}`);
-    if (!['YES','MAYBE','NO'].includes(r.remember)) throw new Error(`REMEMBER_VIOLATION:${g.game_id}`);
-    if (![g.team_1,g.team_2].includes(r.winner)) throw new Error(`WINNER_VIOLATION:${g.game_id}`);
-    if (!Number.isInteger(r.confidence) || r.confidence < 0 || r.confidence > 100) throw new Error(`CONFIDENCE_VIOLATION:${g.game_id}`);
-    if (r.score !== 'UNKNOWN') {
-      const esc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`^${esc(g.team_1)} (0|[1-9]\\d*)-(0|[1-9]\\d*) ${esc(g.team_2)}$`);
-      if (!re.test(r.score)) throw new Error(`SCORE_FORMAT_VIOLATION:${g.game_id}`);
-    }
-  }
-}
-
-export default async (req) => {
-  if (req.method !== 'POST') return fail('POST_ONLY', 405);
-  const arm = Netlify.env.get('NFL_MEMORY_EXECUTION_ARM');
-  if (!arm || req.headers.get('x-nfl-memory-execution-arm') !== arm) return fail('NOT_ARMED', 403);
-
-  let body;
-  try { body = await req.json(); } catch { return fail('INVALID_JSON', 400); }
-  const room = body?.room;
-  if (!['A','B','C'].includes(room) || Object.keys(body).sort().join(',') !== 'room') return fail('ROOM_MUST_BE_EXACTLY_A_B_OR_C', 400);
-
-  const store = getStore({ name:'nfl-memory-contamination-v1-sealed', consistency:'strong' });
-  const key = `room-${room}.json`;
-  if (await store.getMetadata(key, { consistency:'strong' })) return fail(`ROOM_${room}_ALREADY_SEALED`);
-
-  let sampleText, prompt, schemaText, sample, schema;
-  try {
-    [sampleText,prompt,schemaText] = await Promise.all([
-      lockedText('sample-100.json', LOCK.sample),
-      lockedText('analyzer-prompt.txt', LOCK.prompt),
-      lockedText('analyzer-output.schema.json', LOCK.schema)
-    ]);
-    sample = JSON.parse(sampleText); schema = JSON.parse(schemaText); validateSample(sample);
-  } catch (e) { return fail(String(e.message ?? e), 500); }
-
-  const apiKey = Netlify.env.get('OPENAI_API_KEY');
-  const base = Netlify.env.get('OPENAI_BASE_URL');
-  if (!apiKey || !base) return fail('NETLIFY_AI_GATEWAY_ENV_UNAVAILABLE', 500);
-
-  const requestBody = {
-    model: LOCK.model,
-    store: false,
-    reasoning: { effort:'none' },
-    tools: [],
-    instructions: prompt,
-    input: [{ role:'user', content:[{ type:'input_text', text:sampleText }] }],
-    text: { format: { type:'json_schema', name:'nfl_memory_contamination_v1', strict:true, schema } },
-    max_output_tokens: 12000
-  };
-
-  let upstream, raw;
-  try {
-    upstream = await fetch(`${base}/v1/responses`, {
-      method:'POST', headers:{ 'content-type':'application/json', authorization:`Bearer ${apiKey}` },
-      body: JSON.stringify(requestBody)
-    });
-    raw = await upstream.text();
-  } catch (e) { return fail(`UPSTREAM_NETWORK_FAILURE:${e.message}`, 502); }
-  if (!upstream.ok) return fail(`UPSTREAM_HTTP_${upstream.status}`, 502);
-
-  let envelope, outputText, parsed;
-  try {
-    envelope = JSON.parse(raw);
-    if (envelope.status !== 'completed') throw new Error(`RESPONSE_STATUS_${envelope.status}`);
-    if (envelope.model !== LOCK.model) throw new Error(`MODEL_MISMATCH:${envelope.model}`);
-    if (envelope.previous_response_id != null) throw new Error('UNEXPECTED_PREVIOUS_RESPONSE_ID');
-    outputText = (envelope.output ?? []).flatMap(x => x.content ?? []).find(x => x.type === 'output_text')?.text;
-    if (!outputText) throw new Error('NO_OUTPUT_TEXT');
-    parsed = JSON.parse(outputText);
-    validateOutput(parsed, sample);
-  } catch (e) { return fail(`UNSEALED_INVALID_FIRST_OUTPUT:${e.message}`, 422); }
-
-  const sealed = {
-    protocol:'NFL-MEMORY-CONTAMINATION-V1', room,
-    sample_sha256:LOCK.sample, prompt_sha256:LOCK.prompt, schema_sha256:LOCK.schema,
-    requested_model:LOCK.model, returned_model:envelope.model,
-    response_id:envelope.id ?? null,
-    created_at:envelope.created_at ?? null,
-    store_requested:false, tools_requested:[], reasoning_effort:'none', previous_response_id:envelope.previous_response_id ?? null,
-    raw_response_sha256:sha256(raw), output_text_sha256:sha256(outputText),
-    results:parsed.results
-  };
-  const sealedText = JSON.stringify(sealed) + '\n';
-  const write = await store.set(key, sealedText, { onlyIfNew:true, metadata:{ sha256:sha256(sealedText), room } });
-  if (!write.modified) return fail(`ROOM_${room}_SEAL_RACE_ABORTED`);
-
-  return Response.json({ ok:true, sealed:true, room, response_id:sealed.response_id, sealed_sha256:sha256(sealedText), results_sha256:sealed.output_text_sha256 });
+export default async req=>{
+ if(req.method!=='POST')return fail('POST_ONLY',405);
+ const arm=Netlify.env.get('NFL_MEMORY_EXECUTION_ARM');if(!arm||req.headers.get('x-nfl-memory-execution-arm')!==arm)return fail('NOT_ARMED',403);
+ let body;try{body=await req.json();}catch{return fail('INVALID_JSON',400);}const room=body?.room;if(!['A','B','C'].includes(room)||Object.keys(body).sort().join(',')!=='room')return fail('ROOM_MUST_BE_EXACTLY_A_B_OR_C',400);
+ const store=getStore('nfl-memory-contamination-v1-sealed'),claimKey=`room-${room}-claim.json`;
+ if(await store.getMetadata(claimKey,{consistency:'strong'}))return fail(`ROOM_${room}_FIRST_ATTEMPT_ALREADY_CLAIMED`);
+ let sampleText,prompt,schemaText,sample,schema;try{[sampleText,prompt,schemaText]=await Promise.all([lockedText('sample-100.json',LOCK.sample),lockedText('analyzer-prompt.txt',LOCK.prompt),lockedText('analyzer-output.schema.json',LOCK.schema)]);sample=JSON.parse(sampleText);schema=JSON.parse(schemaText);validateSample(sample);}catch(e){return fail(String(e.message??e),500);}
+ const apiKey=Netlify.env.get('OPENAI_API_KEY'),base=Netlify.env.get('OPENAI_BASE_URL');if(!apiKey||!base)return fail('NETLIFY_AI_GATEWAY_ENV_UNAVAILABLE',500);
+ const claim=await store.set(claimKey,JSON.stringify({room,sample_sha256:LOCK.sample,prompt_sha256:LOCK.prompt,schema_sha256:LOCK.schema,model:LOCK.model,claimed_at:new Date().toISOString()})+'\n',{onlyIfNew:true});if(!claim.modified)return fail(`ROOM_${room}_CLAIM_RACE_ABORTED`);
+ const requestBody={model:LOCK.model,store:false,reasoning:{effort:'none'},tools:[],instructions:prompt,input:[{role:'user',content:[{type:'input_text',text:sampleText}]}],text:{format:{type:'json_schema',name:'nfl_memory_contamination_v1',strict:true,schema}},max_output_tokens:12000};
+ let upstream,raw;try{upstream=await fetch(`${base}/v1/responses`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${apiKey}`},body:JSON.stringify(requestBody)});raw=await upstream.text();}catch(e){await store.set(`room-${room}-transport-failure.txt`,String(e),{onlyIfNew:true});return fail(`ROOM_${room}_FIRST_ATTEMPT_TRANSPORT_AMBIGUOUS_NO_RERUN`,502,{claimed:true});}
+ const rawHash=sha256(raw);await store.set(`room-${room}-first-raw.txt`,raw,{onlyIfNew:true,metadata:{sha256:rawHash,http_status:upstream.status}});
+ if(!upstream.ok)return fail(`ROOM_${room}_UPSTREAM_HTTP_${upstream.status}_NO_RERUN`,502,{claimed:true,raw_sha256:rawHash});
+ let envelope,outputText,parsed;try{envelope=JSON.parse(raw);if(envelope.status!=='completed')throw new Error(`RESPONSE_STATUS_${envelope.status}`);if(envelope.model!==LOCK.model)throw new Error(`MODEL_MISMATCH:${envelope.model}`);if(envelope.previous_response_id!=null)throw new Error('UNEXPECTED_PREVIOUS_RESPONSE_ID');outputText=(envelope.output??[]).flatMap(x=>x.content??[]).find(x=>x.type==='output_text')?.text;if(!outputText)throw new Error('NO_OUTPUT_TEXT');parsed=JSON.parse(outputText);validateOutput(parsed,sample);}catch(e){return fail(`ROOM_${room}_INVALID_FIRST_OUTPUT_NO_RERUN:${e.message}`,422,{claimed:true,raw_sha256:rawHash});}
+ const sealed={protocol:'NFL-MEMORY-CONTAMINATION-V1',room,sample_sha256:LOCK.sample,prompt_sha256:LOCK.prompt,schema_sha256:LOCK.schema,requested_model:LOCK.model,returned_model:envelope.model,response_id:envelope.id??null,created_at:envelope.created_at??null,store_requested:false,tools_requested:[],reasoning_effort:'none',previous_response_id:envelope.previous_response_id??null,raw_response_sha256:rawHash,output_text_sha256:sha256(outputText),results:parsed.results};const text=JSON.stringify(sealed)+'\n',sealedHash=sha256(text);const w=await store.set(`room-${room}-sealed.json`,text,{onlyIfNew:true,metadata:{sha256:sealedHash,room}});if(!w.modified)return fail(`ROOM_${room}_SEAL_WRITE_CONFLICT_NO_RERUN`,500,{claimed:true});
+ return Response.json({ok:true,sealed:true,room,response_id:sealed.response_id,sealed_sha256:sealedHash,results_sha256:sealed.output_text_sha256});
 };
-
-export const config = { path:'/run-room' };
+export const config={path:'/run-room'};
