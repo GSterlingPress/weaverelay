@@ -18,10 +18,11 @@ def _source_evidence(inv, records, families):
 
 def apply_v13():
     import audit_engine.relationship as rel
-    import audit_engine.rules as rules
+    import audit_engine.evidence as ev
+    import audit_engine.core as core
     import v12_patch
 
-    old_enrich=v12_patch._enrich
+    old_enrich=rel.enrich_invoice_rows
     def enrich(rows, records):
         stats=old_enrich(rows,records)
         backups=defaultdict(list)
@@ -31,37 +32,43 @@ def apply_v13():
         for inv in rows:
             typ=str(inv.get('type','')).lower(); wo=_canon(inv.get('work_order_id'))
             if typ=='subcontractor' and backups.get(wo):
-                # General reconciliation: use supported third-party actual cost for this WO.
-                # Do not infer a discrepancy here; the contract rule decides the allowed markup.
                 vals=[float(r['amount']) for r in backups[wo] if float(r.get('amount') or 0)>0]
                 if vals:
                     inv['subcontractor_base_cost']=max(vals)
                     inv['_support_evidence']=_source_evidence(inv,records,{'contractor_backup'})
             elif typ=='equipment':
-                ev=_source_evidence(inv,records,{'equipment_log','work_order'})
-                if ev: inv['_support_evidence']=ev
+                src=_source_evidence(inv,records,{'equipment_log','work_order'})
+                if src: inv['_support_evidence']=src
             elif typ=='mileage':
-                ev=_source_evidence(inv,records,{'mileage_log'})
-                if ev: inv['_support_evidence']=ev
+                src=_source_evidence(inv,records,{'mileage_log'})
+                if src: inv['_support_evidence']=src
             elif typ=='unit':
-                ev=_source_evidence(inv,records,{'completion','ticket'})
-                if ev: inv['_support_evidence']=ev
+                src=_source_evidence(inv,records,{'completion','ticket'})
+                if src: inv['_support_evidence']=src
             elif typ in {'labor','overtime'}:
-                ev=_source_evidence(inv,records,{'timesheet','timesheet_scope'})
-                if ev: inv['_support_evidence']=ev
+                src=_source_evidence(inv,records,{'timesheet','timesheet_scope'})
+                if src: inv['_support_evidence']=src
         return stats
+    ev.enrich_invoice_rows=enrich
+    rel.enrich_invoice_rows=enrich
     v12_patch._enrich=enrich
 
-    old_eval=rules.evaluate_invoice
-    def evaluate_invoice(contract, invoice_rows, *args, **kwargs):
-        findings=old_eval(contract,invoice_rows,*args,**kwargs)
-        existing={(f.get('code'), (f.get('evidence') or {}).get('invoice',{}).get('row')) for f in findings}
+    old_audit=core.audit
+    def audit(contract, invoice_rows, field=None):
+        findings=old_audit(contract,invoice_rows,field)
+        rows_by_num={r.get('_row'):r for r in invoice_rows}
+        for f in findings:
+            ir=((f.get('evidence') or {}).get('invoice') or {}).get('row')
+            inv=rows_by_num.get(ir)
+            if inv and inv.get('_support_evidence'):
+                f.setdefault('evidence',{})['field']=inv['_support_evidence'][0]
         cap=((contract.get('subcontractor') or {}).get('markup_cap_pct'))
         if cap is None:return findings
         cap=float(cap)
+        existing={(f.get('code'), ((f.get('evidence') or {}).get('invoice') or {}).get('row')) for f in findings}
         for inv in invoice_rows:
             if str(inv.get('type','')).lower()!='subcontractor':continue
-            billed_pct=inv.get('markup_pct'); base=inv.get('subcontractor_base_cost')
+            billed_pct=inv.get('markup_pct');base=inv.get('subcontractor_base_cost')
             if billed_pct is None or base is None:continue
             billed_pct=float(billed_pct);base=float(base)
             if billed_pct<=cap:continue
@@ -69,7 +76,7 @@ def apply_v13():
             if key in existing:continue
             amount=round(base*(billed_pct-cap)/100.0,2)
             if amount<=0:continue
-            findings.append({'code':'SUBCONTRACTOR_MARKUP','status':'OVERBILLED','confidence':'HIGH','amount':amount,'message':f'Subcontractor markup billed at {billed_pct:g}%; contract allows {cap:g}% on supported third-party cost of ${base:,.2f}.','evidence':{'invoice':{'source':inv.get('_source'),'row':inv.get('_row'),'page':inv.get('_page'),'table':inv.get('_table')},'field':(inv.get('_support_evidence') or [None])[0]},'_invoice_row':inv})
+            findings.append({'code':'SUBCONTRACTOR_MARKUP','status':'OVERBILLED','confidence':'HIGH','amount':amount,'message':f'Subcontractor markup billed at {billed_pct:g}%; contract allows {cap:g}% on supported third-party cost of ${base:,.2f}.','evidence':{'invoice':{'source':inv.get('_source'),'row':inv.get('_row'),'page':inv.get('_page'),'table':inv.get('_table')},'field':(inv.get('_support_evidence') or [None])[0]}})
         return findings
-    rules.evaluate_invoice=evaluate_invoice
-    rel.evaluate_invoice=evaluate_invoice
+    core.audit=audit
+    rel.audit=audit
