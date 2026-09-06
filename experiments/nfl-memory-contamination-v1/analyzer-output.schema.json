@@ -1,0 +1,49 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "results"
+  ],
+  "properties": {
+    "results": {
+      "type": "array",
+      "minItems": 100,
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "game_id",
+          "remember",
+          "winner",
+          "score",
+          "confidence"
+        ],
+        "properties": {
+          "game_id": {
+            "type": "string"
+          },
+          "remember": {
+            "type": "string",
+            "enum": [
+              "YES",
+              "MAYBE",
+              "NO"
+            ]
+          },
+          "winner": {
+            "type": "string"
+          },
+          "score": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      }
+    }
+  }
+}
