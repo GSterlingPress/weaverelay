@@ -9,9 +9,9 @@ RUN cat /tmp/runtime/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz \
  && test -f /app/app.py \
  && rm -rf /tmp/runtime /tmp/audit-runtime.tar.xz
 COPY app.py /app/app.py
-COPY document_classifier.py v11_ingestion.py v12_patch.py v12_ingestion.py /app/
-RUN printf '\nfrom v11_ingestion import register_v11\nregister_v11(app)\nfrom v12_patch import apply_v12\napply_v12()\nfrom v12_ingestion import register_v12\nregister_v12(app)\n' >> /app/app.py \
- && python -m py_compile /app/app.py /app/document_classifier.py /app/v11_ingestion.py /app/v12_patch.py /app/v12_ingestion.py \
+COPY document_classifier.py v11_ingestion.py v12_patch.py v12_ingestion.py v13_patch.py /app/
+RUN printf '\nfrom v11_ingestion import register_v11\nregister_v11(app)\nfrom v12_patch import apply_v12\napply_v12()\nfrom v13_patch import apply_v13\napply_v13()\nfrom v12_ingestion import register_v12\nregister_v12(app)\n' >> /app/app.py \
+ && python -m py_compile /app/app.py /app/document_classifier.py /app/v11_ingestion.py /app/v12_patch.py /app/v12_ingestion.py /app/v13_patch.py \
  && pip install --no-cache-dir -r requirements.txt \
  && useradd --create-home --uid 10001 audituser \
  && mkdir -p /tmp/contract-money-audit-jobs \
