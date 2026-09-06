@@ -32,19 +32,15 @@ def _multi_semantic_pdf(path):
                 if wm and any(x in low for x in ('work order','mileage','completion','subcontract','traffic','vendor','third-party','third party')):
                     current_wo=wm.group(0).upper(); line_wo=current_wo
 
-                # Third-party/subcontract support: line-local WO wins, so mixed docs do not
-                # need to be classified as a subcontractor invoice to contribute cost proof.
                 if line_wo and '$' in line and re.search(r'(?i)traffic|subcontract|third[- ]party|vendor',line):
                     am=re.search(r'\$\s*([0-9][0-9,]*(?:\.\d{2})?)',line)
                     if am:
                         out.append({'source':p.name,'page':pno,'record_type':'contractor_backup','work_order_id':line_wo,'description':line,'amount':float(am.group(1).replace(',','')),'supported':True,'extraction_confidence':'HIGH'})
 
-                # Explicit unauthorized work can coexist with any other evidence family.
                 if line_wo and re.search(r'(?i)\bnot authorized\b|\bunauthorized\b',line):
                     name=re.split(r'(?i)\bnot authorized\b|\bunauthorized\b',line,1)[0].strip(' :-')
                     out.append({'source':p.name,'page':pno,'record_type':'work_order','work_order_id':line_wo,'authorized':False,'equipment_key':_canon(name),'description':line,'extraction_confidence':'HIGH'})
 
-            # Mileage sections are independently extracted even in a mixed support PDF.
             for mm in re.finditer(r'(?i)mileage\s+log\s*-?\s*(WO-[0-9A-Z-]+)',text):
                 wo=mm.group(1).upper(); tail=text[mm.end():]
                 next_header=re.search(r'(?im)^\s*(?:WO-[0-9A-Z-]+|[A-Z][A-Z /_-]{4,}:)\s*$',tail)
@@ -58,7 +54,6 @@ def _multi_semantic_pdf(path):
 def apply_v14():
     import audit_engine.relationship as rel
     import audit_engine.evidence as ev
-    import v12_patch
 
     old_ingest=ev.ingest_evidence
     def ingest(paths):
@@ -76,5 +71,3 @@ def apply_v14():
 
     ev.ingest_evidence=ingest
     rel.ingest_evidence=ingest
-    # V12 relationship code can retain a module-level reference.
-    v12_patch._ingest_evidence=ingest
