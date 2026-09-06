@@ -20,7 +20,7 @@ export default async request=>{
     await writeSecret(connectionId,encryptSecret({accessToken,method:'netlify-oauth'}));
     await writeConnection(state.workspaceId,'netlify',{id:connectionId,workspaceId:state.workspaceId,provider:'netlify',status:'connected',externalAccountId:String(account.id),externalAccountName:accountName,scopes:['netlify-oauth'],lastCheckedAt:now,lastErrorCode:null,createdAt:previous?.createdAt||now,updatedAt:now});
     const staleSecretId=replacementSecretId(previous,connectionId);if(staleSecretId)await deleteSecret(staleSecretId);
-    const workspace=await readWorkspace(state.workspaceId);if(workspace){workspace.providers=(workspace.providers||[]).map(p=>p.id==='netlify'?{...p,status:'connected',detail:`Authorized as ${accountName}.`,checkedAt:now}:p);workspace.updatedAt=now;await writeWorkspace(workspace)}
+    const workspace=await readWorkspace(state.workspaceId);if(workspace){workspace.providers=(workspace.providers||[]).map(p=>p.id==='netlify'?{...p,status:'connected',detail:`Authorized as ${accountName}.`,checkedAt:now}:p);workspace.diagnosis=null;workspace.lastDiagnosticSnapshot=null;workspace.status='needs_action';workspace.updatedAt=now;await writeWorkspace(workspace)}
     return json(200,{ok:true,provider:'netlify',workspaceId:state.workspaceId,status:'connected'});
   }catch(error){console.error('Netlify OAuth callback failed:',error instanceof Error?error.message:'unknown error');return safeError(error)}
 };
