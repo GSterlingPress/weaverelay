@@ -1,0 +1,9 @@
+{
+  "name": "nfl-memory-contamination-v1-execution",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^10.0.0"
+  }
+}
