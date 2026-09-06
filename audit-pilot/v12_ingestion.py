@@ -8,7 +8,7 @@ from audit_engine.relationship import audit_relationship
 
 MIXED={'.pdf','.xlsx','.xlsm','.csv','.txt','.md','.eml','.msg','.jpg','.jpeg','.png','.webp','.tif','.tiff','.bmp','.heic'}
 CONTRACT={'MASTER_CONTRACT','RATE_SHEET'};INVOICE={'INVOICE'};EVIDENCE=set(DOC_TYPES)-CONTRACT-INVOICE-{'OTHER'}
-CSS="""body{font-family:Inter,ui-sans-serif,system-ui;background:#071018;color:#e8eef3;margin:0}*{box-sizing:border-box}.w{max-width:1120px;margin:auto;padding:32px 18px}.h,.c{border-radius:18px;padding:24px}.h{background:linear-gradient(135deg,#0d1720,#101d28);border:1px solid #243442}.c{background:#0d1720;border:1px solid #243442;margin-top:18px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.nav a{color:#a9bbc8;text-decoration:none;margin-left:14px}.doc{display:grid;grid-template-columns:1.45fr .9fr .48fr;gap:14px;padding:15px;border:1px solid #263847;border-radius:13px;margin:10px 0;background:#0a141d}.b{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.ok{background:#103b2e;color:#8ce1bd}.rv{background:#4a3410;color:#ffd889}.btn{display:inline-block;background:#197a5d;color:white;border:0;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;cursor:pointer}.secondary{background:#182631;color:#dbe5eb;border:1px solid #314654}.muted{color:#91a4b2;font-size:13px}.conf{font-size:25px;font-weight:900}.conf small{display:block;font-size:10px;color:#91a4b2;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px}.viewer{display:inline-block;margin-top:9px;color:#9bd7ff;text-decoration:none;font-size:13px;font-weight:800}.viewer:hover{text-decoration:underline}select,input[type=file]{width:100%;padding:10px;background:#0a141d;color:#eef5f7;border:1px solid #38505f;border-radius:8px}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px}.reviewbox{display:block;margin-top:9px;padding:9px 10px;border:1px solid #6a5220;border-radius:9px;background:#221a09;color:#f5dda4}.error{background:#351616;border:1px solid #663131;padding:12px;border-radius:10px;color:#ffb7b7}.ready{border-top:1px solid #263847;margin-top:22px;padding-top:18px}@media(max-width:760px){.doc{grid-template-columns:1fr}.actions{align-items:stretch}.actions .btn,.actions form,.actions form .btn{width:100%;text-align:center}.nav{font-size:13px}}"""
+CSS="""body{font-family:Inter,ui-sans-serif,system-ui;background:#071018;color:#e8eef3;margin:0}*{box-sizing:border-box}.w{max-width:1120px;margin:auto;padding:32px 18px}.h,.c{border-radius:18px;padding:24px}.h{background:linear-gradient(135deg,#0d1720,#101d28);border:1px solid #243442}.c{background:#0d1720;border:1px solid #243442;margin-top:18px}.top{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:14px}.nav a{color:#a9bbc8;text-decoration:none;margin-left:14px}.doc{display:grid;grid-template-columns:1.45fr .9fr .48fr;gap:14px;padding:15px;border:1px solid #263847;border-radius:13px;margin:10px 0;background:#0a141d}.b{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.ok{background:#103b2e;color:#8ce1bd}.rv{background:#4a3410;color:#ffd889}.btn{display:inline-block;background:#197a5d;color:white;border:0;border-radius:10px;padding:12px 16px;font-weight:800;text-decoration:none;cursor:pointer}.secondary{background:#182631;color:#dbe5eb;border:1px solid #314654}.muted{color:#91a4b2;font-size:13px}.conf{font-size:25px;font-weight:900}.conf small{display:block;font-size:10px;color:#91a4b2;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px}.viewer{display:inline-block;margin-top:9px;color:#9bd7ff;text-decoration:none;font-size:13px;font-weight:800}.viewer:hover{text-decoration:underline}select,input[type=file]{width:100%;padding:10px;background:#0a141d;color:#eef5f7;border:1px solid #38505f;border-radius:8px}.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:18px}.reviewbox{display:block;margin-top:9px;padding:9px 10px;border:1px solid #6a5220;border-radius:9px;background:#221a09;color:#f5dda4}.error{background:#351616;border:1px solid #663131;padding:12px;border-radius:10px;color:#ffb7b7}.ready{border-top:1px solid #263847;margin-top:22px;padding-top:18px}.viewerbar{position:sticky;top:0;z-index:10;background:#071018;border-bottom:1px solid #243442;padding:12px 14px;display:flex;gap:10px;align-items:center;justify-content:space-between}.viewerframe{width:100%;height:calc(100vh - 66px);border:0;background:white}.viewerimg{display:block;max-width:100%;height:auto;margin:0 auto;background:white}.viewerpage{min-height:100vh;background:#071018}.viewertext{white-space:pre-wrap;overflow-wrap:anywhere;color:#dfe9ef;padding:18px;max-width:1100px;margin:auto}.returnbtn{background:#197a5d;color:white;text-decoration:none;font-weight:800;border-radius:9px;padding:10px 14px}.openfull{color:#9bd7ff;text-decoration:none;font-weight:700;font-size:13px}@media(max-width:760px){.doc{grid-template-columns:1fr}.actions{align-items:stretch}.actions .btn,.actions form,.actions form .btn{width:100%;text-align:center}.nav{font-size:13px}.viewerbar{align-items:flex-start;flex-direction:column}.viewerframe{height:calc(100vh - 112px)}.returnbtn{width:100%;text-align:center}}"""
 
 def page(title,body):return HTMLResponse(f"<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>{html.escape(title)}</title><style>{CSS}</style></head><body><div class='w'>{body}</div></body></html>")
 def safe(j):return bool(j) and all(x not in j for x in ('/','\\','..'))
@@ -16,6 +16,17 @@ def sf(j):return BASE/j/'classification-state.json'
 def load(j):return json.loads(sf(j).read_text())
 def save(j,s):sf(j).write_text(json.dumps(s,indent=2))
 def ready(docs):return all(d['classification']['status']=='CLASSIFIED' for d in docs) and any(d['classification']['type'] in CONTRACT for d in docs) and any(d['classification']['type'] in INVOICE for d in docs)
+
+def _doc_for_job(job_id,doc_index):
+    if not safe(job_id) or not sf(job_id).exists():return None,None,None
+    s=load(job_id);docs=s.get('documents',[])
+    if doc_index<0 or doc_index>=len(docs):return None,None,None
+    d=docs[doc_index];p=Path(d.get('saved_path',''))
+    try:
+        p=p.resolve();root=(BASE/job_id).resolve()
+        if root not in p.parents or not p.exists():return None,None,None
+    except Exception:return None,None,None
+    return d,p,s
 
 def render(j,s,error=None):
     docs=s['documents'];pending=sum(d['classification']['status']=='NEEDS_REVIEW' for d in docs)
@@ -25,7 +36,7 @@ def render(j,s,error=None):
     body+=f"<form method='post' action='/v12/{html.escape(j)}/review'>"
     for i,d in enumerate(docs):
         c=d['classification'];cls='ok' if c['status']=='CLASSIFIED' else 'rv';rs='; '.join(c.get('reasons',[]));opts=''.join(f"<option value='{t}' {'selected' if t==c['type'] else ''}>{html.escape(LABELS[t])}</option>" for t in DOC_TYPES)
-        body+=f"<div class='doc'><div><b>{html.escape(d['original_name'])}</b><div class='muted'>{html.escape(rs)}</div><a class='viewer' target='_blank' rel='noopener' href='/v12/{html.escape(j)}/document/{i}'>View original document ↗</a></div><div><span class='b {cls}'>{c['status'].replace('_',' ')}</span><div style='margin-top:8px'><select name='type_{i}'>{opts}</select></div>"
+        body+=f"<div class='doc'><div><b>{html.escape(d['original_name'])}</b><div class='muted'>{html.escape(rs)}</div><a class='viewer' href='/v12/{html.escape(j)}/document/{i}'>View original document →</a></div><div><span class='b {cls}'>{c['status'].replace('_',' ')}</span><div style='margin-top:8px'><select name='type_{i}'>{opts}</select></div>"
         if c['status']=='NEEDS_REVIEW':body+=f"<label class='reviewbox'><input type='checkbox' name='confirm_{i}' value='yes'> I confirm this document type</label>"
         body+=f"</div><div class='conf'><small>AI confidence</small>{c['confidence_pct']}%<div class='muted'>in selected type</div></div></div>"
     body+="<div class='actions'><a class='btn secondary' href='/v12'>← Back / start over</a><button class='btn' type='submit'>Save types & continue →</button></div></form>"
@@ -56,22 +67,30 @@ def register_v12(app):
             save(j,s);return render(j,s)
         except Exception as e:
             shutil.rmtree(w,ignore_errors=True);return page('V13',f"<div class='c'>{html.escape(str(e))}<div class='actions'><a class='btn secondary' href='/v12'>← Back</a></div></div>")
-    @app.get('/v12/{job_id}/document/{doc_index}')
+    @app.get('/v12/{job_id}/document/{doc_index}',response_class=HTMLResponse)
     def view_document(request:Request,job_id:str,doc_index:int):
-        if not safe(job_id) or not sf(job_id).exists():return HTMLResponse('Not found',404)
-        s=load(job_id);docs=s.get('documents',[])
-        if doc_index<0 or doc_index>=len(docs):return HTMLResponse('Not found',404)
-        d=docs[doc_index];p=Path(d.get('saved_path',''))
-        try:
-            p=p.resolve();root=(BASE/job_id).resolve()
-            if root not in p.parents or not p.exists():return HTMLResponse('Document is no longer available.',404)
-        except Exception:return HTMLResponse('Not found',404)
-        name=d.get('original_name') or p.name;ext=p.suffix.lower()
+        d,p,s=_doc_for_job(job_id,doc_index)
+        if not d:return HTMLResponse('Document is no longer available.',404)
+        name=d.get('original_name') or p.name;ext=p.suffix.lower();back=f'/v12/{html.escape(job_id)}/review-screen'
+        bar=f"<div class='viewerbar'><a class='returnbtn' href='{back}'>← Return to classification</a><b>{html.escape(name)}</b><a class='openfull' target='_blank' rel='noopener' href='/v12/{html.escape(job_id)}/document/{doc_index}/raw'>Open full screen ↗</a></div>"
         if ext in {'.txt','.md','.csv','.eml'}:
             text=p.read_text(encoding='utf-8',errors='ignore')[:500000]
-            return page(name,f"<div class='top'><b>{html.escape(name)}</b><div class='nav'><a href='javascript:window.close()'>Close</a></div></div><div class='c'><pre style='white-space:pre-wrap;overflow-wrap:anywhere;color:#dfe9ef'>{html.escape(text)}</pre></div>")
-        media=mimetypes.guess_type(name)[0] or 'application/octet-stream'
+            body=bar+f"<pre class='viewertext'>{html.escape(text)}</pre>"
+        elif ext in {'.jpg','.jpeg','.png','.webp','.gif','.bmp','.tif','.tiff'}:
+            body=bar+f"<div style='padding:10px'><img class='viewerimg' src='/v12/{html.escape(job_id)}/document/{doc_index}/raw' alt='{html.escape(name)}'></div>"
+        else:
+            body=bar+f"<iframe class='viewerframe' src='/v12/{html.escape(job_id)}/document/{doc_index}/raw' title='{html.escape(name)}'></iframe>"
+        return HTMLResponse(f"<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><title>{html.escape(name)}</title><style>{CSS}</style></head><body class='viewerpage'>{body}</body></html>")
+    @app.get('/v12/{job_id}/document/{doc_index}/raw')
+    def raw_document(request:Request,job_id:str,doc_index:int):
+        d,p,s=_doc_for_job(job_id,doc_index)
+        if not d:return HTMLResponse('Document is no longer available.',404)
+        name=d.get('original_name') or p.name;media=mimetypes.guess_type(name)[0] or 'application/octet-stream'
         return FileResponse(str(p),media_type=media,filename=name,content_disposition_type='inline')
+    @app.get('/v12/{job_id}/review-screen',response_class=HTMLResponse)
+    def review_screen(request:Request,job_id:str):
+        if not safe(job_id) or not sf(job_id).exists():return HTMLResponse('Not found',404)
+        return render(job_id,load(job_id))
     @app.post('/v12/{job_id}/review',response_class=HTMLResponse)
     async def review(request:Request,job_id:str):
         if not safe(job_id) or not sf(job_id).exists():return HTMLResponse('Not found',404)
