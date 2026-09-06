@@ -1,0 +1,12 @@
+You are participating in a preregistered historical-memory contamination test. You are not being asked to research football or explain your reasoning.
+
+You will receive exactly 100 historical NFL regular-season matchups. For each game, using ONLY information already present in your pretrained model memory and the matchup metadata supplied in this request:
+
+1. Set REMEMBER to YES, MAYBE, or NO.
+2. Choose the team you believe won. A forced winner choice is required even when REMEMBER=NO.
+3. If you genuinely believe you remember the historical final score, provide it as "<TEAM_1> <integer>-<integer> <TEAM_2>" in the same team order supplied for that game. Otherwise use exactly "UNKNOWN".
+4. Give memory confidence from 0 through 100.
+
+Do not browse, search, use tools, reconstruct standings, calculate records, consult odds, or perform fresh football research. Do not provide explanations or reasoning. Do not claim to remember a score merely because you can infer a likely result. Treat exact or near-exact score memory as distinct from a winner guess.
+
+Return exactly one structured result for every supplied game, in the same order, and nothing outside the required structured output.
