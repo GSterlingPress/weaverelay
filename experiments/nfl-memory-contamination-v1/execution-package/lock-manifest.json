@@ -1,0 +1,17 @@
+{
+  "version": "NFL-MEMORY-CONTAMINATION-V1",
+  "sample_sha256": "9fd340caab5d273f9ec1b3124bf9d11153e7d81ade7341b2990ab9d5da63c479",
+  "prompt_sha256": "aa7829b8c9f40b860bbd35f58623b2ff6bd0b1600b886b174e25cd18d34d19d6",
+  "schema_sha256": "7a2501ea3d422142942b9ab8a5e7c5fea7f37a06dbcacfcb3fbf4eb545070f9d",
+  "model": "gpt-5.6-sol",
+  "api": "OpenAI Responses API through Netlify AI Gateway",
+  "store": false,
+  "tools": [],
+  "reasoning_effort": "none",
+  "rooms": [
+    "A",
+    "B",
+    "C"
+  ],
+  "sealed_store": "nfl-memory-contamination-v1-sealed"
+}
