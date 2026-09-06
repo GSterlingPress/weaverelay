@@ -9,7 +9,9 @@ RUN cat /tmp/runtime/runtime.* | base64 --decode > /tmp/audit-runtime.tar.xz \
  && test -f /app/app.py \
  && rm -rf /tmp/runtime /tmp/audit-runtime.tar.xz
 COPY app.py /app/app.py
-RUN python -m py_compile /app/app.py \
+COPY document_classifier.py v11_ingestion.py /app/
+RUN printf '\nfrom v11_ingestion import register_v11\nregister_v11(app)\n' >> /app/app.py \
+ && python -m py_compile /app/app.py /app/document_classifier.py /app/v11_ingestion.py \
  && pip install --no-cache-dir -r requirements.txt \
  && useradd --create-home --uid 10001 audituser \
  && mkdir -p /tmp/contract-money-audit-jobs \
