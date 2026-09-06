@@ -1,7 +1,7 @@
 export default async () => {
   try {
-    const baseURL = process.env.OPENAI_BASE_URL;
-    const apiKey = process.env.OPENAI_API_KEY;
+    const baseURL = Netlify.env.get("OPENAI_BASE_URL");
+    const apiKey = Netlify.env.get("OPENAI_API_KEY");
     if (!baseURL || !apiKey) {
       return Response.json({ ok: false, error: "AI_GATEWAY_ENV_UNAVAILABLE", hasBaseURL: !!baseURL, hasKey: !!apiKey }, { status: 503 });
     }
