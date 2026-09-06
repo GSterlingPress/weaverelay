@@ -1,22 +1,21 @@
 export default async () => {
   try {
-    const baseURL = process.env.AI_GATEWAY_URL;
-    const apiKey = process.env.NETLIFY_AI_GATEWAY_TOKEN;
+    const baseURL = process.env.OPENAI_BASE_URL;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!baseURL || !apiKey) {
-      return Response.json({ ok: false, error: "AI_GATEWAY_ENV_UNAVAILABLE", hasBaseURL: !!baseURL, hasToken: !!apiKey }, { status: 503 });
+      return Response.json({ ok: false, error: "AI_GATEWAY_ENV_UNAVAILABLE", hasBaseURL: !!baseURL, hasKey: !!apiKey }, { status: 503 });
     }
 
-    const response = await fetch(`${baseURL.replace(/\/$/, "")}/chat/completions`, {
+    const response = await fetch(`${baseURL.replace(/\/$/, "")}/v1/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: "openai/gpt-4.1-mini",
+        model: "gpt-5",
         messages: [{ role: "user", content: "Reply exactly: NETLIFY_AI_GATEWAY_OK" }],
-        temperature: 0,
-        max_tokens: 20,
+        max_completion_tokens: 20,
       }),
     });
 
