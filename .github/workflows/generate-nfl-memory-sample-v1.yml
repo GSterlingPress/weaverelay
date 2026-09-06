@@ -1,0 +1,87 @@
+name: Generate locked NFL memory sample V1
+on:
+  push:
+    branches: [nfl-memory-sample-v1]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate from game IDs only
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/nflverse/nflverse-pbp-internal/refs/heads/main/released_games.csv -o released_games.csv
+          python3 - <<'PY'
+          import csv, hashlib, json, re
+          from collections import Counter, defaultdict
+
+          SEED = 'NFL-MEMORY-CONTAMINATION-V1-2026-09-06'
+          seasons = list(range(2011, 2026))
+          by = defaultdict(list)
+          pat = re.compile(r'^(20\d\d)_(\d\d)_([A-Z0-9]+)_([A-Z0-9]+)$')
+
+          with open('released_games.csv', newline='', encoding='utf-8') as f:
+              for row in csv.DictReader(f):
+                  gid = row['game_id'].strip()
+                  m = pat.match(gid)
+                  if not m: continue
+                  season, week, away, home = int(m.group(1)), int(m.group(2)), m.group(3), m.group(4)
+                  if season not in seasons: continue
+                  max_reg_week = 17 if season <= 2020 else 18
+                  if not (1 <= week <= max_reg_week): continue
+                  by[season].append({'game_id': gid, 'season': season, 'week': week, 'team_1': away, 'team_2': home})
+
+          missing = [s for s in seasons if not by[s]]
+          assert not missing, missing
+
+          extra_order = sorted(seasons, key=lambda s: hashlib.sha256(f'{SEED}|EXTRA|{s}'.encode()).hexdigest())
+          extras = set(extra_order[:10])
+          selected = []
+          for season in seasons:
+              ranked = sorted(by[season], key=lambda g: hashlib.sha256(f'{SEED}|{season}|{g["game_id"]}'.encode()).hexdigest())
+              selected.extend(ranked[:(7 if season in extras else 6)])
+
+          selected.sort(key=lambda g: (g['season'], g['week'], g['game_id']))
+          assert len(selected) == 100
+          assert len({g['game_id'] for g in selected}) == 100
+          counts = Counter(g['season'] for g in selected)
+          assert set(counts) == set(seasons)
+          assert all(v in (6,7) for v in counts.values())
+          assert sum(v == 7 for v in counts.values()) == 10
+          assert all(1 <= g['week'] <= (17 if g['season'] <= 2020 else 18) for g in selected)
+          allowed = {'game_id','season','week','team_1','team_2'}
+          assert all(set(g) == allowed for g in selected)
+          forbidden = {'score','winner','result','odds','record','spread','moneyline','home_score','away_score'}
+          assert not any(set(g) & forbidden for g in selected)
+          assert all(g['team_1'] and g['team_2'] and g['team_1'] != g['team_2'] for g in selected)
+
+          # Canonical JSON: UTF-8, LF, fixed insertion field order above, compact separators, trailing LF.
+          raw = json.dumps(selected, ensure_ascii=False, separators=(',', ':')) + '\n'
+          open('sample-100.json','w',encoding='utf-8',newline='\n').write(raw)
+          digest = hashlib.sha256(raw.encode('utf-8')).hexdigest()
+          open('sample-100.sha256','w',encoding='ascii',newline='\n').write(digest + '  sample-100.json\n')
+          manifest = {
+              'seed': SEED,
+              'source': 'nflverse/nflverse-pbp-internal released_games.csv (game_id column only)',
+              'selection': 'SHA256 ranking per locked Issue #35 procedure',
+              'season_counts': {str(s): counts[s] for s in seasons},
+              'extra_slot_seasons': sorted(extras),
+              'sample_sha256': digest,
+              'outcome_fields_used': False,
+              'analyzers_run': False
+          }
+          open('sample-manifest.json','w',encoding='utf-8',newline='\n').write(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
+          print(json.dumps(manifest, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nfl-memory-sample-v1
+          path: |
+            sample-100.json
+            sample-100.sha256
+            sample-manifest.json
+          if-no-files-found: error
+          retention-days: 7
