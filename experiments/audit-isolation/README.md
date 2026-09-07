@@ -1,134 +1,59 @@
 # Audit Issue #36 — Pre-Experiment Isolation Harness
 
 ## Scope
-This directory contains ONLY pre-experiment infrastructure for GitHub Issue #36.
+This directory contains ONLY pre-experiment infrastructure for GitHub Issue #36. It does NOT run the accuracy experiment, inspect gold outcomes, score cases, tune thresholds, or change production Audit behavior.
 
-It does NOT run the accuracy experiment, inspect gold outcomes, score cases, tune thresholds, or change production Audit behavior.
-
-## Worker topology
-
+## Locked topology and flow
 - A1/A2/A3 -> RA
 - B1/B2/B3 -> RB
 - C1/C2/C3 -> RC
 - RA/RB/RC -> RM
-- RM commitment proof -> SCORING/GOLD access
+- valid final arm commitment -> SCORING identity -> GOLD
 
-All analyzers/reconcilers are stateless, disposable and case/job scoped.
+Allowed flow is strictly upward: `SOURCE -> analyzer -> trio reconciler -> master reconciler -> scoring`.
 
-## Information-flow rules
+Workers are stateless, disposable, case/job/arm scoped. Cross-worker local reads, sibling-trio reads, downward reads, prior-job reads, and cross-arm commitment reuse are denied.
 
-Allowed flow is upward only:
+## Line-by-line hardening review — 2026-09-07
+PR #39 was re-reviewed against Issue #36 before any accuracy run. The review found and fixed these infrastructure weaknesses:
 
-`SOURCE -> analyzer -> trio reconciler -> master reconciler -> scoring`
+1. Gold access previously accepted a valid RM hash without proving the caller was the scoring layer. Gold now requires a job-independent SCORING session bound to the same case, arm and source-manifest hash.
+2. RM previously could commit without RA/RB/RC having committed. RA/RB/RC and RM now enforce upstream commitment prerequisites.
+3. Commit envelopes were only shallow-frozen. Stored payloads and envelopes are now deep-frozen, and callers receive clones so mutation cannot alter the stored first commitment.
+4. Commitments lacked explicit experiment-arm identity. Every worker/commit/scoring session is now arm-scoped; a commitment from one arm cannot satisfy another arm or unlock its gold.
+5. Issue #36 requires model/runtime/prompt/spec provenance. Commit envelopes now record model version, runtime version, prompt-spec version, task spec, timestamp, case, arm, role, job and manifest hash.
+6. Required analyzer/reconciler hash fields and master first-divergence output are now present in the locked structural schemas.
 
-Disallowed:
+Accuracy/scoring semantics remain intentionally unimplemented.
 
-- analyzer -> analyzer
-- trio -> sibling trio
-- reconciler -> analyzer
-- master -> any lower layer
-- prior job -> new job
-- gold/scoring -> analyzer or reconciler before final commitment
+## Canary and guard tests
+The test suite covers all five required Issue #36 leakage canaries:
+1. analyzer-to-analyzer isolation;
+2. reconciler sibling isolation;
+3. master directionality;
+4. prior-job amnesia;
+5. gold-vault isolation.
 
-## Commitments
+Additional guards prove reconciliation prerequisites, cross-arm isolation, stored-commit immutability, upward-only ACLs and locked schema requirements.
 
-Each worker output is wrapped with case ID, job ID, role, source-manifest hash, task-spec version and timestamp, canonicalized, SHA-256 hashed, and made immutable after commit.
+`npm test` is the repository test command. Running tests is infrastructure validation only; no Audit case is loaded by these tests.
 
-A committed analyzer output can be read only by its assigned first-level reconciler. A first-level reconciler output can be read only by RM. Gold remains locked until a valid final RM commit hash is presented.
+## Metadata-only case discovery
+`case-discovery.mjs` accepts metadata records only. It fails closed if a record contains content-bearing fields such as `content`, `text`, `snippet`, `pages`, OCR/extracted text, outcome/gold/finding/result fields.
 
-## Locked handoff schemas
+The procedure may use only filename/path, file ID, MIME type, byte size and timestamps to nominate source candidates or quarantine likely outcome-bearing artifacts. It marks every discovered file `safe_to_open_for_preparation: false` and always reports `verified_eligible_cases: 0`; eligibility is a separate later protocol step.
 
-Authoritative handoffs are structured, not free-form prose.
+A deterministic SHA-256 metadata-manifest hash is produced so the candidate inventory can be sealed without reading file contents.
 
-### Analyzer finding
-Required fields:
+## Historical metadata inventory
+Inventory date: 2026-09-07. A title-only Library search for audit/invoice/contract/work-order/timesheet artifacts returned one candidate: `audit-report.json`. It was NOT opened. Because its filename suggests an outcome/finding artifact, it remains quarantined and cannot be used as source evidence during preparation.
 
-- finding_id
-- finding_type
-- entity_refs
-- amount_cents
-- currency
-- source_refs
-- governing_rule
-- calculation
-- counter_evidence
-- uncertainties
-- recommended_disposition
-- reason_codes
+**Verified eligible historical cases: 0.**
 
-### Trio reconciliation
-Required fields:
+This means no complete source-package boundary plus separable gold provenance has yet been established outcome-blind. It does not mean no historical cases exist.
 
-- canonical_finding_id
-- member_findings
-- agreement
-- first_divergence
-- amount_cents
-- status
-- reason_codes
-
-### Master reconciliation
-Required fields:
-
-- case_id
-- globally_corroborated_dollars
-- review_required_dollars
-- rejected_suppressed_dollars
-- unresolved_finding_count
-- findings
-
-## Canary tests
-
-The test suite implements all five precommitted canaries from Issue #36:
-
-1. Analyzer-to-analyzer isolation.
-2. Sibling reconciler isolation.
-3. No downward leakage from RM.
-4. Prior-job amnesia after disposal.
-5. Gold-vault firewall until final RM commitment.
-
-It also tests upward-only ACL behavior and output immutability.
-
-Run only the harness tests with:
-
-```bash
-node --test experiments/audit-isolation/harness.test.mjs
-```
-
-This is NOT an accuracy-test command.
-
-## Historical-case inventory — metadata only
-
-Inventory date: 2026-09-07.
-
-The historical-case inventory was performed using file/library metadata and title-only lookup so known financial outcomes were not opened or revealed.
-
-### Located candidate artifacts
-
-| Candidate | Source | Outcome inspected? | Eligibility status |
-|---|---|---:|---|
-| `audit-report.json` | ChatGPT Library | NO | CANDIDATE ARTIFACT ONLY — not yet a verified eligible case |
-
-### Current eligible-case count
-
-**Verified eligible historical cases: 0**
-
-This does not mean no historical cases exist. It means none can yet be declared eligible without identifying a complete sealed source corpus and separately verifiable gold provenance while preserving outcome blindness.
-
-The located `audit-report.json` must not be opened for experiment preparation because its contents may contain findings/outcomes. It may only be associated with a case after a metadata-safe source-package/gold-vault procedure is established.
-
-## Eligibility rule for future inventory
-
-A historical case may enter the precommitted case manifest only when metadata-only preparation can establish all of the following without revealing the answer:
-
-1. complete source-package boundary is identifiable;
-2. source files can be copied/hashed without exposing gold labels to worker infrastructure;
-3. authoritative gold exists in a separable vault or can be independently adjudicated after commitments;
-4. case is not known to have been used to tune the analyzer code/prompt under test;
-5. inclusion/exclusion is decided from source characteristics, not the known financial result.
-
-Until those conditions are satisfied, a candidate remains unverified and cannot be run.
+## Eligibility rule for a future manifest
+A case may enter the precommitted manifest only when metadata-safe preparation establishes: a complete source-package boundary; source files can be hashed/copy-isolated without gold exposure; authoritative gold is separable or independently adjudicable later; the case was not used to tune the analyzer under test; and inclusion is based on source characteristics rather than known financial outcome.
 
 ## Safety stop
-
-Any canary failure blocks all Audit accuracy runs. Any request to open gold, score findings, or run historical cases requires an explicit later instruction and a new protocol step after the case manifest is sealed.
+Any canary failure blocks the accuracy experiment. No file nominated by discovery may be opened merely to decide eligibility. No gold may be revealed until the relevant arm final artifact is committed and a valid scoring identity presents that exact commitment.
