@@ -6,7 +6,7 @@ import{issueOAuthState}from'./_oauth.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const challenge=v=>crypto.createHash('sha256').update(v).digest('base64url');
-const env=key=>{try{return globalThis.Netlify?.env?.get?.(key)||''}catch{return ''}};
+const env=key=>{try{return globalThis.Netlify?.env?.get?.(key)||process.env[key]||''}catch{return process.env[key]||''}};
 const siteBase=()=>String(env('PUBLIC_SITE_URL')||'').replace(/\/$/,'');
 const requestHost=request=>{try{return new URL(request.url).hostname.toLowerCase()}catch{return''}};
 const isPreview=request=>requestHost(request).endsWith('--weaverelay.netlify.app');
@@ -18,11 +18,11 @@ export default async request=>{
     const user=await requireUser(request),body=await request.json(),provider=String(body.provider||''),workspace=await requireWorkspace(user.id,body.workspaceId);
     if(!PROVIDERS[provider]||!(workspace.providers||[]).some(p=>p.id===provider))return json(400,{error:'Provider is not part of this workspace.'});
     if(provider==='railway'){
-      const clientId=env('CONNECT_RAILWAY_CLIENT_ID'),clientSecret=env('CONNECT_RAILWAY_CLIENT_SECRET');
-      if(!clientId||!clientSecret)return json(409,{error:'Railway read-only authorization is not configured on WeaveRelay yet.',configuration:'CONNECT_RAILWAY_CLIENT_ID + CONNECT_RAILWAY_CLIENT_SECRET'});
+      const clientId=env('CONNECT_RAILWAY_CLIENT_ID');
+      if(!clientId)return json(409,{error:'Railway read-only authorization is not configured on WeaveRelay yet.',configuration:'CONNECT_RAILWAY_CLIENT_ID'});
       const codeVerifier=crypto.randomBytes(32).toString('base64url'),{state,redirectUri}=await issueOAuthState({request,userId:user.id,workspaceId:workspace.id,provider,metadata:{pkceVerifier:codeVerifier}}),u=new URL('https://backboard.railway.com/oauth/auth');
-      u.searchParams.set('response_type','code');u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('state',state);u.searchParams.set('scope','openid profile offline_access project:viewer');u.searchParams.set('prompt','consent');u.searchParams.set('code_challenge',challenge(codeVerifier));u.searchParams.set('code_challenge_method','S256');
-      return json(200,{ok:true,provider,authorizationUrl:u.toString(),access:'read-only project selection'});
+      u.searchParams.set('response_type','code');u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('state',state);u.searchParams.set('scope','openid email profile offline_access workspace:viewer project:viewer');u.searchParams.set('prompt','consent');u.searchParams.set('code_challenge',challenge(codeVerifier));u.searchParams.set('code_challenge_method','S256');
+      return json(200,{ok:true,provider,authorizationUrl:u.toString(),access:'read-only workspace + project viewer',pkce:true,confidentialClientSecretRequiredAtStart:false});
     }
     const{state,redirectUri}=await issueOAuthState({request,userId:user.id,workspaceId:workspace.id,provider});
     if(provider==='github'){
