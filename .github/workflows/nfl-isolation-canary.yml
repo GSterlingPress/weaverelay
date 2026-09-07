@@ -1,0 +1,55 @@
+name: NFL Isolation Canary One-Shot
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    if: github.head_ref == 'nfl-isolation-canary'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wait for isolated Netlify deploy preview root
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="https://deploy-preview-${{ github.event.pull_request.number }}--weaverelay.netlify.app"
+          for i in $(seq 1 60); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/" || true)
+            if [ "$code" = "200" ]; then
+              echo "Deploy preview ready at $BASE"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Deploy preview did not become ready" >&2
+          exit 1
+
+      - name: Execute A B C canary exactly once
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL="https://deploy-preview-${{ github.event.pull_request.number }}--weaverelay.netlify.app/internal/nfl-isolation-canary"
+          code=$(curl -sS --retry 0 -o canary-result.json -w '%{http_code}' "$URL")
+          echo "HTTP $code"
+          cat canary-result.json
+          printf '%s  %s\n' "$(sha256sum canary-result.json | awk '{print $1}')" canary-result.json > canary-result.sha256
+          cat canary-result.sha256
+          test "$code" = "200"
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('canary-result.json','utf8')); if(x?.evaluation?.verdict!=='PASS'||x?.football_predictions_run!==false||x?.outcomes_accessed!==false) process.exit(2);"
+
+      - name: Upload locked canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfl-isolation-canary-evidence
+          path: |
+            canary-result.json
+            canary-result.sha256
+          if-no-files-found: warn
+          retention-days: 30
