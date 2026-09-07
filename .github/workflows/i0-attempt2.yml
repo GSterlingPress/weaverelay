@@ -1,0 +1,122 @@
+name: I0 Attempt 2 locked synthetic run
+on:
+  push:
+    paths:
+      - '.github/workflows/i0-attempt2.yml'
+permissions:
+  contents: write
+concurrency:
+  group: i0-attempt2
+  cancel-in-progress: false
+jobs:
+  i0-attempt2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nfl-isolation-canary
+          fetch-depth: 0
+      - name: Verify locked experiment and wait for isolated preview
+        run: |
+          set -euo pipefail
+          test -f netlify/functions/i0-run.mjs
+          grep -q "MASTER='GSP-NFL-BLIND-2026-MASTER-V1|2026-09-07|ISSUE-35', N=300" netlify/functions/i0-run.mjs
+          grep -q "MODEL='gpt-5.6-sol'" netlify/functions/i0-run.mjs
+          URL='https://deploy-preview-38--weaverelay.netlify.app/.netlify/functions/i0-run?start=0&count=1'
+          for n in $(seq 1 30); do
+            code=$(curl -L -sS -o /tmp/probe.json -w '%{http_code}' "$URL" || true)
+            if [ "$code" = 200 ]; then rm -f /tmp/probe.json; exit 0; fi
+            sleep 10
+          done
+          exit 1
+      - name: Run/resume 300 cases with atomic durable checkpoints
+        run: |
+          set -euo pipefail
+          ROOT='experiments/nfl-isolation/artifacts/i0-attempt2'
+          RAW="$ROOT/raw"
+          mkdir -p "$RAW"
+          BASE='https://deploy-preview-38--weaverelay.netlify.app/.netlify/functions/i0-run'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          run_one () {
+            i="$1"; out="$RAW/case-$(printf '%03d' "$i").json"
+            if [ -s "$out" ]; then return 0; fi
+            for attempt in $(seq 1 8); do
+              tmp="${out}.tmp.$$"
+              if curl --fail --retry 0 --connect-timeout 20 --max-time 180 -sS "$BASE?start=$i&count=1" -o "$tmp"; then
+                python - "$tmp" "$i" <<'PY'
+          import json,sys
+          p=sys.argv[1]; i=int(sys.argv[2]); d=json.load(open(p))
+          assert d['test']=='I0-SYNTHETIC-INDEPENDENCE-V1'
+          assert d['nfl_content_accessed'] is False and d['nfl_outcomes_accessed'] is False
+          assert len(d['rows'])==1 and d['rows'][0]['case_index']==i
+          assert len(d['rows'][0]['outputs'])==3
+          PY
+                mv "$tmp" "$out"
+                return 0
+              fi
+              rm -f "$tmp"
+              sleep $((attempt*5))
+            done
+            return 1
+          }
+          export -f run_one
+          export RAW BASE
+          # Lower concurrency: two cases at a time. Each successful case contains A/B/C's three first outputs.
+          seq 0 299 | xargs -P 2 -I{} bash -c 'run_one "$@"' _ {}
+          test "$(find "$RAW" -type f -name 'case-*.json' -size +0c | wc -l)" -eq 300
+          # Durably lock the complete first-output corpus before any scoring.
+          find "$RAW" -type f -name 'case-*.json' -print0 | sort -z | xargs -0 sha256sum > "$ROOT/raw-files.sha256"
+          git add "$ROOT/raw" "$ROOT/raw-files.sha256"
+          git commit -m 'Lock I0 Attempt 2 900 first outputs before scoring'
+          git push origin HEAD:nfl-isolation-canary
+      - name: Score only after all 900 first outputs are locked
+        run: |
+          set -euo pipefail
+          git pull --ff-only origin nfl-isolation-canary
+          python - <<'PY'
+          import json,glob,hashlib,math,statistics,os
+          root='experiments/nfl-isolation/artifacts/i0-attempt2'; files=sorted(glob.glob(root+'/raw/case-*.json'))
+          assert len(files)==300
+          rows=[]
+          for f in files:
+            d=json.load(open(f)); assert d['nfl_content_accessed'] is False and d['nfl_outcomes_accessed'] is False
+            assert len(d['rows'])==1; rows.append(d['rows'][0])
+          rooms='ABC'; valid=leaks=correct=0; probs={r:[] for r in rooms}; errs={r:[] for r in rooms}; choices={r:[] for r in rooms}; hashes=[]
+          for row in rows:
+            leaks+=row['leaks']; truth=row['hidden']['label']
+            for r in rooms:
+              o=row['outputs'][r]; hashes.append({'case_id':row['case_id'],'room':r,'payload_sha256':o['payload_sha256'],'raw_sha256':o['raw_sha256'],'provider_request_id':o['provider_request_id'],'reported_model':o['reported_model']})
+              p=o['parsed']; ok=bool(p and p.get('canary') and p.get('choice') in ('ALPHA','BETA') and p.get('peer_content_seen') is False)
+              valid+=int(ok)
+              if ok:
+                ch=p['choice']; choices[r].append(ch); probs[r].append(float(p['p_alpha'])); e=int(ch!=truth); errs[r].append(e); correct+=1-e
+          def corr(x,y):
+            if len(x)!=len(y) or len(x)<2:return None
+            mx,my=statistics.mean(x),statistics.mean(y); sx=sum((a-mx)**2 for a in x); sy=sum((b-my)**2 for b in y)
+            if sx==0 or sy==0:return 1.0 if x==y else 0.0
+            return sum((a-mx)*(b-my) for a,b in zip(x,y))/math.sqrt(sx*sy)
+          pairs={}
+          for a,b in [('A','B'),('A','C'),('B','C')]:
+            pairs[a+b]={'probability_correlation':corr(probs[a],probs[b]),'error_correlation':corr(errs[a],errs[b]),'choice_agreement':sum(x==y for x,y in zip(choices[a],choices[b]))/len(choices[a])}
+          raw_concat=b''.join(open(f,'rb').read() for f in files)
+          manifest={'test':'I0-SYNTHETIC-INDEPENDENCE-V1','attempt':2,'cases':300,'sessions':900,'nfl_sample_materialized':False,'nfl_predictions_run':False,'nfl_outcomes_accessed':False,'cross_room_leaks':leaks,'structurally_valid':valid,'structurally_valid_rate':valid/900,'synthetic_accuracy':correct/valid if valid else None,'pairwise_dependence':pairs,'pass_pipeline':leaks==0 and valid/900>=.99,'raw_files_sha256':hashlib.sha256(raw_concat).hexdigest(),'first_output_hashes':hashes}
+          open(root+'/i0-attempt2-manifest.json','w').write(json.dumps(manifest,indent=2)+'\n')
+          print(json.dumps({k:v for k,v in manifest.items() if k!='first_output_hashes'},indent=2))
+          if not manifest['pass_pipeline']: raise SystemExit(2)
+          PY
+      - name: Lock scored result
+        run: |
+          set -euo pipefail
+          ROOT='experiments/nfl-isolation/artifacts/i0-attempt2'
+          sha256sum "$ROOT/i0-attempt2-manifest.json" > "$ROOT/i0-attempt2-manifest.sha256"
+          git add "$ROOT/i0-attempt2-manifest.json" "$ROOT/i0-attempt2-manifest.sha256"
+          git commit -m 'Lock I0 Attempt 2 scored result'
+          git push origin HEAD:nfl-isolation-canary
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: i0-attempt2-locked
+          path: experiments/nfl-isolation/artifacts/i0-attempt2
+          retention-days: 90
