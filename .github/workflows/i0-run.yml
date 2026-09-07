@@ -1,0 +1,80 @@
+name: I0 locked synthetic run
+on:
+  push:
+    paths:
+      - '.github/workflows/i0-run.yml'
+permissions:
+  contents: write
+jobs:
+  i0:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nfl-isolation-canary
+      - name: Wait for isolated deploy preview
+        run: |
+          URL='https://deploy-preview-38--weaverelay.netlify.app/.netlify/functions/i0-run?start=0&count=1'
+          for n in $(seq 1 30); do
+            code=$(curl -L -sS -o /tmp/probe.json -w '%{http_code}' "$URL" || true)
+            if [ "$code" = 200 ]; then rm -f /tmp/probe.json; exit 0; fi
+            sleep 10
+          done
+          exit 1
+      - name: Run exactly 300 synthetic cases in sealed A/B/C rooms
+        run: |
+          mkdir -p experiments/nfl-isolation/artifacts/i0/raw
+          export BASE='https://deploy-preview-38--weaverelay.netlify.app/.netlify/functions/i0-run'
+          seq 0 299 | xargs -P 5 -I{} bash -c '
+            set -e
+            out="experiments/nfl-isolation/artifacts/i0/raw/case-$(printf "%03d" {}).json"
+            curl --fail --retry 1 --retry-all-errors --max-time 120 -sS "$BASE?start={}&count=1" -o "$out"
+          '
+          test "$(find experiments/nfl-isolation/artifacts/i0/raw -name 'case-*.json' | wc -l)" -eq 300
+      - name: Score and hash without any NFL data
+        run: |
+          python - <<'PY'
+          import json,glob,hashlib,math,statistics,os
+          files=sorted(glob.glob('experiments/nfl-isolation/artifacts/i0/raw/case-*.json'))
+          rows=[]
+          for f in files:
+            d=json.load(open(f)); assert d['nfl_content_accessed'] is False and d['nfl_outcomes_accessed'] is False
+            assert len(d['rows'])==1; rows.append(d['rows'][0])
+          assert len(rows)==300
+          rooms='ABC'; valid=leaks=correct=0; probs={r:[] for r in rooms}; errs={r:[] for r in rooms}; choices={r:[] for r in rooms}; hashes=[]
+          for row in rows:
+            leaks+=row['leaks']; truth=row['hidden']['label']
+            for r in rooms:
+              o=row['outputs'][r]; hashes.append({'case_id':row['case_id'],'room':r,'payload_sha256':o['payload_sha256'],'raw_sha256':o['raw_sha256'],'provider_request_id':o['provider_request_id'],'reported_model':o['reported_model']})
+              p=o['parsed']; ok=bool(p and p.get('canary') and p.get('choice') in ('ALPHA','BETA') and p.get('peer_content_seen') is False)
+              valid+=int(ok)
+              if ok:
+                ch=p['choice']; choices[r].append(ch); probs[r].append(float(p['p_alpha'])); e=int(ch!=truth); errs[r].append(e); correct+=1-e
+          def corr(x,y):
+            if len(x)!=len(y) or len(x)<2:return None
+            mx,my=statistics.mean(x),statistics.mean(y); sx=sum((a-mx)**2 for a in x); sy=sum((b-my)**2 for b in y)
+            if sx==0 or sy==0:return 1.0 if x==y else 0.0
+            return sum((a-mx)*(b-my) for a,b in zip(x,y))/math.sqrt(sx*sy)
+          pairs={}
+          for a,b in [('A','B'),('A','C'),('B','C')]:
+            pairs[a+b]={'probability_correlation':corr(probs[a],probs[b]),'error_correlation':corr(errs[a],errs[b]),'choice_agreement':sum(x==y for x,y in zip(choices[a],choices[b]))/len(choices[a])}
+          raw_concat=b''.join(open(f,'rb').read() for f in files)
+          manifest={'test':'I0-SYNTHETIC-INDEPENDENCE-V1','cases':300,'sessions':900,'nfl_sample_materialized':False,'nfl_predictions_run':False,'nfl_outcomes_accessed':False,'cross_room_leaks':leaks,'structurally_valid':valid,'structurally_valid_rate':valid/900,'synthetic_accuracy':correct/valid if valid else None,'pairwise_dependence':pairs,'pass_pipeline':leaks==0 and valid/900>=.99,'raw_files_sha256':hashlib.sha256(raw_concat).hexdigest(),'first_output_hashes':hashes}
+          os.makedirs('experiments/nfl-isolation/artifacts/i0',exist_ok=True)
+          open('experiments/nfl-isolation/artifacts/i0/i0-manifest.json','w').write(json.dumps(manifest,indent=2)+'\n')
+          print(json.dumps({k:v for k,v in manifest.items() if k!='first_output_hashes'},indent=2))
+          if not manifest['pass_pipeline']: raise SystemExit(2)
+          PY
+      - name: Lock all raw outputs and hashes on isolated branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add experiments/nfl-isolation/artifacts/i0
+          git commit -m 'Lock I0 900 first outputs and dependence manifest'
+          git push origin HEAD:nfl-isolation-canary
+      - uses: actions/upload-artifact@v4
+        with:
+          name: i0-locked-raw-and-manifest
+          path: experiments/nfl-isolation/artifacts/i0
+          retention-days: 90
