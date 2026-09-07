@@ -1,7 +1,7 @@
 import { MODEL, ROOMS, evaluate, makeCanaries, preflight, sha256 } from '../../experiments/nfl-isolation/canary-controller.mjs';
 
 export default async (req) => {
-  if(req.method!=='POST') return Response.json({error:'POST only'},{status:405});
+  if(req.method!=='GET') return Response.json({error:'GET only'},{status:405});
   const base=Netlify.env.get('NETLIFY_AI_GATEWAY_BASE_URL')||Netlify.env.get('OPENAI_BASE_URL');
   const key=Netlify.env.get('NETLIFY_AI_GATEWAY_KEY')||Netlify.env.get('OPENAI_API_KEY');
   if(!base||!key) return Response.json({verdict:'FAIL',error:'AI Gateway unavailable',football_predictions_run:false,outcomes_accessed:false},{status:503});
