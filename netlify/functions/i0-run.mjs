@@ -13,24 +13,25 @@ function makeCase(i){
 }
 function prompt(c,r){return `Synthetic reasoning calibration only. This is not sports and contains no real-world event.\nRoom ${r} private canary: ${c.canaries[r]}\nEvidence: ${JSON.stringify(c.evidence)}\nRule: base score = signal_a*weight_a + signal_b*weight_b. Disturbance band means unknown adjustment: LOW=-20..-7, MID=-6..6, HIGH=7..20. Estimate P(ALPHA) and choose ALPHA/BETA. Do not invent or seek outside facts. Return JSON only: {"room":"${r}","canary":"${c.canaries[r]}","choice":"ALPHA|BETA","p_alpha":0.0,"base_score":0,"peer_content_seen":false}.`}
 async function ask(c,r){
- const body={model:MODEL,input:[{role:'user',content:prompt(c,r)}],reasoning:{effort:'minimal'},text:{format:{type:'json_object'}}};
- const payload=JSON.stringify(body), base=process.env.OPENAI_BASE_URL, key=process.env.OPENAI_API_KEY;
+ const body={model:MODEL,messages:[{role:'user',content:prompt(c,r)}],response_format:{type:'json_object'}};
+ const payload=JSON.stringify(body), base=Netlify.env.get('NETLIFY_AI_GATEWAY_BASE_URL')||Netlify.env.get('OPENAI_BASE_URL'), key=Netlify.env.get('NETLIFY_AI_GATEWAY_KEY')||Netlify.env.get('OPENAI_API_KEY');
  if(!base||!key) throw new Error('gateway unavailable');
- const res=await fetch(`${base}/v1/responses`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${key}`},body:payload});
+ const res=await fetch(`${base}/v1/chat/completions`,{method:'POST',headers:{'content-type':'application/json',authorization:`Bearer ${key}`},body:payload});
  const raw=await res.text(); if(!res.ok) throw new Error(`provider ${res.status}`); const env=JSON.parse(raw);
- const text=env.output_text??env.output?.flatMap(x=>x.content??[]).find(x=>x.type==='output_text')?.text; if(typeof text!=='string')throw new Error('missing output');
+ const text=env.choices?.[0]?.message?.content; if(typeof text!=='string')throw new Error('missing output');
  let parsed=null; try{parsed=JSON.parse(text)}catch{}
  return {payload_sha256:h(payload),raw_sha256:h(text),provider_request_id:env.id??null,reported_model:env.model??null,raw:text,parsed};
 }
 export default async req=>{
- const url=new URL(req.url), start=Number(url.searchParams.get('start')??0), count=Math.min(Number(url.searchParams.get('count')??5),10);
+ const url=new URL(req.url), start=Number(url.searchParams.get('start')??0), count=Math.min(Number(url.searchParams.get('count')??1),3);
  if(!Number.isInteger(start)||start<0||start>=N||!Number.isInteger(count)||count<1)return new Response('bad range',{status:400});
- const rows=[];
- for(let i=start;i<Math.min(start+count,N);i++){
-  const c=makeCase(i); const out={};
-  const vals=await Promise.all(['A','B','C'].map(async r=>[r,await ask(c,r)])); for(const [r,v] of vals)out[r]=v;
-  let leaks=0,valid=0; for(const r of ['A','B','C']){const v=out[r]; if(v.parsed&&v.parsed.canary===c.canaries[r]&&['ALPHA','BETA'].includes(v.parsed.choice)&&Number.isFinite(Number(v.parsed.p_alpha))&&v.parsed.peer_content_seen===false)valid++; for(const p of ['A','B','C'])if(p!==r&&v.raw.includes(c.canaries[p]))leaks++;}
-  rows.push({case_index:i,case_id:c.evidence.case_id,evidence_sha256:h(JSON.stringify(c.evidence)),hidden_sha256:h(JSON.stringify(c.hidden)),hidden:c.hidden,outputs:out,leaks,valid});
- }
- return Response.json({test:'I0-SYNTHETIC-INDEPENDENCE-V1',start,count:rows.length,nfl_content_accessed:false,nfl_outcomes_accessed:false,rows});
+ try{
+  const rows=[];
+  for(let i=start;i<Math.min(start+count,N);i++){
+   const c=makeCase(i),out={}; const vals=await Promise.all(['A','B','C'].map(async r=>[r,await ask(c,r)])); for(const [r,v] of vals)out[r]=v;
+   let leaks=0,valid=0; for(const r of ['A','B','C']){const v=out[r]; if(v.parsed&&v.parsed.canary===c.canaries[r]&&['ALPHA','BETA'].includes(v.parsed.choice)&&Number.isFinite(Number(v.parsed.p_alpha))&&v.parsed.peer_content_seen===false)valid++; for(const p of ['A','B','C'])if(p!==r&&v.raw.includes(c.canaries[p]))leaks++;}
+   rows.push({case_index:i,case_id:c.evidence.case_id,evidence_sha256:h(JSON.stringify(c.evidence)),hidden_sha256:h(JSON.stringify(c.hidden)),hidden:c.hidden,outputs:out,leaks,valid});
+  }
+  return Response.json({test:'I0-SYNTHETIC-INDEPENDENCE-V1',start,count:rows.length,nfl_content_accessed:false,nfl_outcomes_accessed:false,rows},{headers:{'cache-control':'no-store'}});
+ }catch(error){return Response.json({test:'I0-SYNTHETIC-INDEPENDENCE-V1',error:String(error?.message||error),nfl_content_accessed:false,nfl_outcomes_accessed:false},{status:500,headers:{'cache-control':'no-store'}})}
 };
