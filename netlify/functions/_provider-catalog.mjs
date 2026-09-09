@@ -1,16 +1,16 @@
 export const PROVIDERS = Object.freeze({
   github: {label:'GitHub',category:'source',authorization:'oauth',purpose:'Repository and deployment-source access selected by the customer.'},
-  netlify: {label:'Netlify',category:'hosting',authorization:'oauth-or-token',purpose:'Site, deploy, domain and environment configuration selected by the customer.'},
-  vercel: {label:'Vercel',category:'hosting',authorization:'token',purpose:'Projects, deployments, domains and environment configuration selected by the customer.'},
+  netlify: {label:'Netlify',category:'hosting',authorization:'oauth',purpose:'Site, deploy, domain and environment configuration selected by the customer.'},
+  vercel: {label:'Vercel',category:'hosting',authorization:'integration-oauth',purpose:'Projects, deployments, domains and environment configuration selected by the customer.'},
   render: {label:'Render',category:'runtime',authorization:'api-key',purpose:'Services, deploys, datastores and runtime configuration selected by the customer.'},
-  cloudflare: {label:'Cloudflare',category:'edge-hosting',authorization:'api-token',purpose:'Pages, Workers, DNS and edge configuration selected by the customer.'},
-  supabase: {label:'Supabase',category:'backend',authorization:'oauth-or-token',purpose:'Project configuration and health checks selected by the customer.'},
-  neon: {label:'Neon',category:'database',authorization:'api-key',purpose:'Postgres project, branch and compute-endpoint health selected by the customer.'},
-  stripe: {label:'Stripe',category:'payments',authorization:'restricted-key',purpose:'Restricted read-only account health without collecting customer financial records.'},
-  resend: {label:'Resend',category:'email',authorization:'api-key',purpose:'Domain and sending configuration selected by the customer.'},
-  railway: {label:'Railway',category:'runtime',authorization:'oauth-or-token',purpose:'Service and environment configuration selected by the customer.'},
-  runpod: {label:'RunPod',category:'compute',authorization:'api-key',purpose:'GPU compute, Pod and Serverless endpoint connection status; spend actions must remain separately confirmed.'},
-  comfyui: {label:'ComfyUI',category:'workflow-runtime',authorization:'endpoint-or-token',purpose:'ComfyUI workflow/API health as a separate application layer even when it is hosted on RunPod.'},
+  cloudflare: {label:'Cloudflare',category:'edge-hosting',authorization:'oauth',purpose:'Pages, Workers, DNS and edge configuration selected by the customer.'},
+  supabase: {label:'Supabase',category:'backend',authorization:'oauth',purpose:'Project configuration and health checks selected by the customer.'},
+  neon: {label:'Neon',category:'database',authorization:'integration-oauth',purpose:'Postgres project, branch and compute-endpoint health selected by the customer.'},
+  stripe: {label:'Stripe',category:'payments',authorization:'connect-oauth-or-restricted-key',purpose:'Restricted read-only account health without collecting customer financial records.'},
+  resend: {label:'Resend',category:'email',authorization:'oauth-pkce',purpose:'Domain and sending configuration selected by the customer.'},
+  railway: {label:'Railway',category:'runtime',authorization:'oauth-pkce',purpose:'Service and environment configuration selected by the customer.'},
+  runpod: {label:'RunPod',category:'compute',authorization:'restricted-api-key',purpose:'GPU compute, Pod and Serverless endpoint connection status; spend actions must remain separately confirmed.'},
+  comfyui: {label:'ComfyUI',category:'workflow-runtime',authorization:'auto-or-api-key',purpose:'ComfyUI workflow/API health as a separate application layer even when it is hosted on RunPod.'},
 });
 export const CORE_PROVIDER_IDS=Object.freeze(['github','netlify','railway','supabase','stripe','runpod','comfyui']);
 export const EXPANDED_PROVIDER_IDS=Object.freeze(['vercel','render','cloudflare','neon','resend']);
