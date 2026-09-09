@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { Resend } from 'resend';
 import { createLoginToken } from './_auth.mjs';
 import { enforceAuthRequestLimit } from './_auth-rate-limit.mjs';
@@ -5,8 +6,9 @@ import { normalizeEmail,isValidEmail } from './_token.mjs';
 import { deployContext } from './_scoped-store.mjs';
 import { json,publicBase } from './_http.mjs';
 
+const PREVIEW_TESTER_EMAIL_SHA256='b57074a84a77d94914788b76a64df152601b7f490e670008d1e34705edfd2775';
 const isPreviewContext=()=>['deploy-preview','branch-deploy'].includes(deployContext());
-const previewTesterEmail=()=>normalizeEmail(process.env.WEAVERELAY_PREVIEW_TEST_EMAIL||'');
+const isPreviewTester=email=>crypto.createHash('sha256').update(normalizeEmail(email)).digest('hex')===PREVIEW_TESTER_EMAIL_SHA256;
 
 export default async request=>{
   if(request.method!=='POST')return json(405,{ok:false,error:'Method not allowed.'});
@@ -15,9 +17,9 @@ export default async request=>{
   const email=normalizeEmail(body.email);if(!isValidEmail(email))return json(400,{ok:false,error:'Enter a valid email address.'});
   try{await enforceAuthRequestLimit(request,email)}catch(error){return json(error.status||429,{ok:false,error:'Too many sign-in requests. Please wait and try again.'})}
 
-  if(isPreviewContext()&&previewTesterEmail()&&email===previewTesterEmail()){
+  if(isPreviewContext()&&isPreviewTester(email)){
     let token;try{token=createLoginToken(email,{next:body.next})}catch{return json(500,{ok:false,error:'WeaveRelay could not create a preview sign-in link.'})}
-    return json(200,{ok:true,message:'Opening the isolated preview test account…',previewSignInUrl:`/signin.html?t=${encodeURIComponent(token)}`});
+    return json(200,{ok:true,message:'Opening the isolated preview test account…',previewSignInUrl:`/signin.html?t=${encodeURIComponent(token)}&preview=1`});
   }
 
   if(!process.env.RESEND_API_KEY)return json(500,{ok:false,error:'Email sign-in is not configured yet.'});

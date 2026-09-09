@@ -111,6 +111,14 @@
   from = "/api/diagnose"
   to = "/.netlify/functions/diagnose-workspace-truth"
   status = 200
+[[redirects]]
+  from = "/api/diagnostics/detail"
+  to = "/.netlify/functions/diagnostic-detail"
+  status = 200
+[[redirects]]
+  from = "/api/domain/providers"
+  to = "/.netlify/functions/domain-provider-evidence"
+  status = 200
 
 # RunPod controls — exact reviewed Pods only; stopping requires explicit approval
 [[redirects]]
