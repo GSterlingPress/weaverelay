@@ -6,13 +6,15 @@ const AUTH_VERSION='wra1';
 const SESSION_COOKIE='wr_session';
 const SESSION_TTL_MS=30*24*60*60*1000;
 const PREVIEW_USER={id:'44c4557e395b57618c6c0664520ac6a4',email:'preview@weaverelay.local',sessionToken:null};
+const PREVIEW_HOST=/^deploy-preview-\d+--weaverelay\.netlify\.app$/;
+const BRANCH_HOST=/^[a-z0-9-]+--weaverelay\.netlify\.app$/;
 
 function requestHost(request){try{return new URL(request.url).hostname.toLowerCase()}catch{return ''}}
 function isTestDeployRequest(request){
   const host=requestHost(request),context=deployContext();
   if(host==='staging.weaverelay.com')return true;
-  if(host.endsWith('.netlify.app'))return true;
-  return ['deploy-preview','branch-deploy'].includes(context);
+  if(PREVIEW_HOST.test(host)||BRANCH_HOST.test(host))return true;
+  return ['deploy-preview','branch-deploy'].includes(context)&&host.endsWith('--weaverelay.netlify.app');
 }
 function authSecret(value=process.env.WEAVERELAY_AUTH_SECRET||process.env.WAITLIST_TOKEN_SECRET){
   const raw=String(value||'');
