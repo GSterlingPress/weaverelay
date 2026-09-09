@@ -26,12 +26,33 @@ test('unrelated netlify hosts cannot become Railway OAuth callback origins',asyn
   });
 });
 
-test('provider start binds Railway callback to preview and callback uses domain proof instead of legacy exactly-one-project selection',async()=>{
+test('provider start isolates Railway preview and production client identities',async()=>{
   const start=await fs.readFile(new URL('../netlify/functions/provider-start.mjs',import.meta.url),'utf8');
-  const callback=await fs.readFile(new URL('../netlify/functions/oauth-railway-callback.mjs',import.meta.url),'utf8');
+  assert.match(start,/CONNECT_RAILWAY_DEV_CLIENT_ID/);
+  assert.match(start,/public-preview/);
+  assert.match(start,/confidential-production/);
+  assert.match(start,/railwayClientMode/);
+  assert.match(start,/railwayClientId/);
   assert.match(start,/railwayCallbackOrigin\(request\)/);
-  assert.match(start,/callbackOrigin/);
+});
+
+test('Railway callback enforces matching client context and public preview exchange never uses production secret',async()=>{
+  const callback=await fs.readFile(new URL('../netlify/functions/oauth-railway-callback.mjs',import.meta.url),'utf8');
+  assert.match(callback,/CONNECT_RAILWAY_DEV_CLIENT_ID/);
+  assert.match(callback,/oauth_client_context_mismatch/);
+  assert.match(callback,/production_oauth_secret_missing/);
+  assert.match(callback,/clientMode==='public-preview'/);
+  assert.match(callback,/form\.set\('client_id',configuredClientId\)/);
+  assert.match(callback,/clientMode==='confidential-production'.*CONNECT_RAILWAY_CLIENT_SECRET/s);
   assert.match(callback,/findProjectForDomain/);
   assert.match(callback,/matchedDomain/);
   assert.doesNotMatch(callback,/select_exactly_one_project/);
+});
+
+test('Railway callback outcomes are terminal and do not restart authorization',async()=>{
+  const callback=await fs.readFile(new URL('../netlify/functions/oauth-railway-callback.mjs',import.meta.url),'utf8');
+  const client=await fs.readFile(new URL('../wr-railway-oauth.js',import.meta.url),'utf8');
+  assert.match(callback,/terminal=1/);
+  assert.doesNotMatch(callback,/provider\/start/);
+  assert.doesNotMatch(client,/setTimeout\([^)]*start\(/s);
 });
