@@ -1,0 +1,88 @@
+name: I0 Attempt 2 resume six missing cases
+on:
+  push:
+    paths: ['.github/workflows/i0-attempt2-resume.yml']
+permissions:
+  contents: write
+jobs:
+  resume:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nfl-isolation-canary
+          fetch-depth: 0
+      - name: Fetch preserved Attempt 2 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/a2
+          gh api repos/${{ github.repository }}/actions/artifacts/10021455066/zip > /tmp/a2.zip
+          unzip -q /tmp/a2.zip -d /tmp/a2
+          ROOT='experiments/nfl-isolation/artifacts/i0-attempt2'; mkdir -p "$ROOT/raw"
+          find /tmp/a2 -type f -name 'case-*.json' -exec cp {} "$ROOT/raw/" \;
+          test "$(find "$ROOT/raw" -name 'case-*.json' | wc -l)" -eq 294
+          python - <<'PY'
+          import glob,re
+          ids={int(re.search(r'case-(\d+)\.json$',f).group(1)) for f in glob.glob('experiments/nfl-isolation/artifacts/i0-attempt2/raw/case-*.json')}
+          assert sorted(set(range(300))-ids)==[73,74,75,76,77,78]
+          PY
+      - name: Run only missing cases, concurrency one
+        run: |
+          set -euo pipefail
+          ROOT='experiments/nfl-isolation/artifacts/i0-attempt2'; RAW="$ROOT/raw"
+          BASE='https://deploy-preview-38--weaverelay.netlify.app/.netlify/functions/i0-run'
+          for i in 73 74 75 76 77 78; do
+            out="$RAW/case-$(printf '%03d' "$i").json"; test ! -e "$out"
+            ok=0
+            for attempt in $(seq 1 12); do
+              tmp="${out}.tmp"
+              if curl --fail --connect-timeout 20 --max-time 240 -sS "$BASE?start=$i&count=1" -o "$tmp"; then
+                python - "$tmp" "$i" <<'PY'
+          import json,sys
+          d=json.load(open(sys.argv[1])); i=int(sys.argv[2])
+          assert d['test']=='I0-SYNTHETIC-INDEPENDENCE-V1'
+          assert d['nfl_content_accessed'] is False and d['nfl_outcomes_accessed'] is False
+          assert len(d['rows'])==1 and d['rows'][0]['case_index']==i and len(d['rows'][0]['outputs'])==3
+          PY
+                mv "$tmp" "$out"; ok=1; break
+              fi
+              rm -f "$tmp"; sleep $((attempt*10))
+            done
+            test "$ok" -eq 1
+          done
+          test "$(find "$RAW" -name 'case-*.json' | wc -l)" -eq 300
+      - name: Lock 900 before scoring, then score once
+        run: |
+          set -euo pipefail
+          ROOT='experiments/nfl-isolation/artifacts/i0-attempt2'; RAW="$ROOT/raw"
+          find "$RAW" -name 'case-*.json' -print0 | sort -z | xargs -0 sha256sum > "$ROOT/raw-files.sha256"
+          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$ROOT/raw" "$ROOT/raw-files.sha256"; git commit -m 'Lock all 900 I0 Attempt 2 first outputs'; git push origin HEAD:nfl-isolation-canary
+          python - <<'PY'
+          import json,glob,hashlib,math,statistics
+          root='experiments/nfl-isolation/artifacts/i0-attempt2'; fs=sorted(glob.glob(root+'/raw/case-*.json')); assert len(fs)==300
+          rooms='ABC'; valid=leaks=correct=0; probs={r:[] for r in rooms}; errs={r:[] for r in rooms}; choices={r:[] for r in rooms}
+          for f in fs:
+            d=json.load(open(f)); assert not d['nfl_content_accessed'] and not d['nfl_outcomes_accessed']; row=d['rows'][0]; leaks+=row['leaks']; truth=row['hidden']['label']
+            for r in rooms:
+              p=row['outputs'][r]['parsed']; ok=bool(p and p.get('canary') and p.get('choice') in ('ALPHA','BETA') and p.get('peer_content_seen') is False); valid+=ok
+              if ok:
+                choices[r].append(p['choice']); probs[r].append(float(p['p_alpha'])); e=int(p['choice']!=truth); errs[r].append(e); correct+=1-e
+          def corr(x,y):
+            mx,my=statistics.mean(x),statistics.mean(y); sx=sum((a-mx)**2 for a in x); sy=sum((b-my)**2 for b in y)
+            return (sum((a-mx)*(b-my) for a,b in zip(x,y))/math.sqrt(sx*sy)) if sx and sy else (1.0 if x==y else 0.0)
+          pairs={a+b:{'probability_correlation':corr(probs[a],probs[b]),'error_correlation':corr(errs[a],errs[b]),'choice_agreement':sum(x==y for x,y in zip(choices[a],choices[b]))/len(choices[a])} for a,b in [('A','B'),('A','C'),('B','C')]}
+          m={'test':'I0-SYNTHETIC-INDEPENDENCE-V1','attempt':2,'cases':300,'sessions':900,'nfl_sample_materialized':False,'nfl_predictions_run':False,'nfl_outcomes_accessed':False,'cross_room_leaks':leaks,'structurally_valid':valid,'structurally_valid_rate':valid/900,'synthetic_accuracy':correct/valid if valid else None,'pairwise_dependence':pairs,'pass_pipeline':leaks==0 and valid/900>=.99}
+          open(root+'/i0-attempt2-manifest.json','w').write(json.dumps(m,indent=2)+'\n'); print(json.dumps(m,indent=2))
+          PY
+          sha256sum "$ROOT/i0-attempt2-manifest.json" > "$ROOT/i0-attempt2-manifest.sha256"
+          git add "$ROOT/i0-attempt2-manifest.json" "$ROOT/i0-attempt2-manifest.sha256"; git commit -m 'Lock final I0 Attempt 2 verdict'; git push origin HEAD:nfl-isolation-canary
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: i0-attempt2-final
+          path: experiments/nfl-isolation/artifacts/i0-attempt2
+          retention-days: 90
