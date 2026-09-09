@@ -2,7 +2,7 @@ import crypto from'node:crypto';
 import{requireUser}from'./_auth.mjs';
 import{requireWorkspace}from'./_workspace-store.mjs';
 import{PROVIDERS}from'./_provider-catalog.mjs';
-import{issueOAuthState}from'./_oauth.mjs';
+import{issueOAuthState,railwayCallbackOrigin}from'./_oauth.mjs';
 import{json,safeError}from'./_http.mjs';
 
 const challenge=v=>crypto.createHash('sha256').update(v).digest('base64url');
@@ -20,9 +20,9 @@ export default async request=>{
     if(provider==='railway'){
       const clientId=env('CONNECT_RAILWAY_CLIENT_ID');
       if(!clientId)return json(409,{error:'Railway read-only authorization is not configured on WeaveRelay yet.',configuration:'CONNECT_RAILWAY_CLIENT_ID'});
-      const codeVerifier=crypto.randomBytes(32).toString('base64url'),{state,redirectUri}=await issueOAuthState({request,userId:user.id,workspaceId:workspace.id,provider,metadata:{pkceVerifier:codeVerifier}}),u=new URL('https://backboard.railway.com/oauth/auth');
+      const codeVerifier=crypto.randomBytes(32).toString('base64url'),callbackOrigin=railwayCallbackOrigin(request),{state,redirectUri}=await issueOAuthState({request,userId:user.id,workspaceId:workspace.id,provider,metadata:{pkceVerifier:codeVerifier},callbackOrigin}),u=new URL('https://backboard.railway.com/oauth/auth');
       u.searchParams.set('response_type','code');u.searchParams.set('client_id',clientId);u.searchParams.set('redirect_uri',redirectUri);u.searchParams.set('state',state);u.searchParams.set('scope','openid email profile offline_access workspace:viewer project:viewer');u.searchParams.set('prompt','consent');u.searchParams.set('code_challenge',challenge(codeVerifier));u.searchParams.set('code_challenge_method','S256');
-      return json(200,{ok:true,provider,authorizationUrl:u.toString(),access:'read-only workspace + project viewer',pkce:true,confidentialClientSecretRequiredAtStart:false});
+      return json(200,{ok:true,provider,authorizationUrl:u.toString(),access:'read-only workspace + project viewer',pkce:true,callbackOrigin});
     }
     const{state,redirectUri}=await issueOAuthState({request,userId:user.id,workspaceId:workspace.id,provider});
     if(provider==='github'){
