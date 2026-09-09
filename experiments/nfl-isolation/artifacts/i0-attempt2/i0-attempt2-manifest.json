@@ -1,0 +1,31 @@
+{
+  "test": "I0-SYNTHETIC-INDEPENDENCE-V1",
+  "attempt": 2,
+  "cases": 300,
+  "sessions": 900,
+  "nfl_sample_materialized": false,
+  "nfl_predictions_run": false,
+  "nfl_outcomes_accessed": false,
+  "cross_room_leaks": 0,
+  "structurally_valid": 900,
+  "structurally_valid_rate": 1.0,
+  "synthetic_accuracy": 0.9733333333333334,
+  "pairwise_dependence": {
+    "AB": {
+      "probability_correlation": 0.9788031000797627,
+      "error_correlation": 0.7967594647636943,
+      "choice_agreement": 0.99
+    },
+    "AC": {
+      "probability_correlation": 0.9862118794689335,
+      "error_correlation": 0.8789019936535795,
+      "choice_agreement": 0.9933333333333333
+    },
+    "BC": {
+      "probability_correlation": 0.9776102352502878,
+      "error_correlation": 0.8199054669992348,
+      "choice_agreement": 0.99
+    }
+  },
+  "pass_pipeline": true
+}
